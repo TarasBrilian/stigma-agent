@@ -11,9 +11,7 @@ async function bootstrap(): Promise<void> {
   });
 
   // Validate + strip unknown fields on every DTO.
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, transform: true }),
-  );
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   await app.listen(process.env.PORT ?? 3001);
 }

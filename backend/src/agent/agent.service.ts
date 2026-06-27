@@ -1,5 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Profile } from '../config/constants';
+import {
+  heuristicProfile,
+  parseAllocationReply,
+  parseProfileReply,
+  type AllocationReply,
+  type ProfileReply,
+  type RiskAnswer,
+} from './agent.parse';
 
 interface ChatMsg {
   role: 'system' | 'user' | 'assistant';
@@ -19,7 +27,8 @@ interface ChatMsg {
 export class AgentService {
   private readonly logger = new Logger(AgentService.name);
   private readonly apiKey = process.env.OPENROUTER_API_KEY ?? '';
-  private readonly model = process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o-mini';
+  private readonly model =
+    process.env.OPENROUTER_MODEL ?? 'openai/gpt-oss-120b:free';
 
   /** Low-level chat completion against OpenRouter. */
   private async complete(messages: ChatMsg[]): Promise<string> {
@@ -39,28 +48,64 @@ export class AgentService {
     return data.choices?.[0]?.message?.content ?? '';
   }
 
-  /** Classify a user into a risk bucket. Returns a bucket + reasoning only. */
+  /**
+   * Classify a user into a risk bucket. Returns a bucket + reasoning only — the
+   * bucket then drives purely deterministic logic elsewhere (golden rule #1). If
+   * the model is unavailable or its reply is unparseable, falls back to a
+   * deterministic heuristic so onboarding still works without a key.
+   */
   async profileRisk(
-    answers: Record<string, unknown>[],
+    answers: RiskAnswer[],
     demographics: Record<string, unknown>,
-  ): Promise<{ profile: Profile; reasoning: string; score?: number }> {
-    // TODO: prompt the model to classify, then parse the reply into a Profile.
-    // The bucket then drives purely deterministic logic elsewhere.
-    this.logger.debug(
-      `profileRisk: ${answers.length} answers, demographics keys=${Object.keys(demographics).length}`,
-    );
-    throw new Error('AgentService.profileRisk: not implemented');
+  ): Promise<ProfileReply> {
+    try {
+      const reply = await this.complete([
+        {
+          role: 'system',
+          content:
+            'You are a risk-profiling assistant. Classify the user into exactly ' +
+            'one bucket. Respond ONLY with JSON: ' +
+            '{"profile":"Conservative|Moderate|Aggressive","reasoning":"...",' +
+            '"score":0-100} where a higher score is more risk-tolerant.',
+        },
+        { role: 'user', content: JSON.stringify({ answers, demographics }) },
+      ]);
+      const parsed = parseProfileReply(reply);
+      if (parsed) return parsed;
+      this.logger.warn('profileRisk: unparseable reply; using heuristic');
+    } catch (err) {
+      this.logger.warn(
+        `profileRisk: LLM unavailable; using heuristic: ${(err as Error).message}`,
+      );
+    }
+    return heuristicProfile(answers);
   }
 
-  /** Suggest an allocation (bps) for a goal. The result is USER-EDITABLE. */
+  /**
+   * Suggest an allocation (bps) for a goal. The result is USER-EDITABLE and is
+   * validated by the caller; this throws on failure so the caller can fall back
+   * to a preset (golden rule #1 — never pipe this straight into a swap).
+   */
   async suggestAllocation(
     profile: Profile,
     goal: { targetAmountUsd: string; targetYear: number; note?: string },
-  ): Promise<{ allocation: Record<string, number>; rationale: string }> {
-    // TODO: prompt for an allocation suggestion; the stored (edited) value is
-    // what actually executes — never pipe this straight into a swap.
-    this.logger.debug(`suggestAllocation: ${profile} -> ${goal.targetYear}`);
-    throw new Error('AgentService.suggestAllocation: not implemented');
+  ): Promise<AllocationReply> {
+    const reply = await this.complete([
+      {
+        role: 'system',
+        content:
+          'You suggest a starter asset allocation in basis points (integers ' +
+          'summing to 10000) across these assets only: mUSDC, mBTC, mNVDAx, ' +
+          'mXAUT, mGOOGLx. Respond ONLY with JSON: ' +
+          '{"allocation":{"mBTC":4000,...},"rationale":"..."}.',
+      },
+      { role: 'user', content: JSON.stringify({ profile, goal }) },
+    ]);
+    const parsed = parseAllocationReply(reply);
+    if (!parsed) {
+      throw new Error('AgentService.suggestAllocation: unparseable reply');
+    }
+    return parsed;
   }
 
   /** Write a natural-language rationale for a rebalance (display only). */
@@ -89,7 +134,10 @@ export class AgentService {
           'You answer questions about the user’s portfolio using only the ' +
           'provided snapshot. Be concise and never give financial guarantees.',
       },
-      { role: 'user', content: `Snapshot: ${JSON.stringify(snapshot)}\n\nQ: ${question}` },
+      {
+        role: 'user',
+        content: `Snapshot: ${JSON.stringify(snapshot)}\n\nQ: ${question}`,
+      },
     ]);
   }
 }

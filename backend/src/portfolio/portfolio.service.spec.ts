@@ -1,0 +1,65 @@
+import { PortfolioService } from './portfolio.service';
+import { AgentService } from '../agent/agent.service';
+import { ChainService } from '../chain/chain.service';
+import { PricingService } from '../pricing/pricing.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { allocationSumBps, isValidAllocation } from '../config/money';
+
+describe('PortfolioService (no-chain paths)', () => {
+  const agentMock = { suggestAllocation: jest.fn() };
+
+  const make = (): PortfolioService =>
+    new PortfolioService(
+      undefined as unknown as PrismaService,
+      undefined as unknown as ChainService,
+      undefined as unknown as PricingService,
+      agentMock as unknown as AgentService,
+    );
+
+  beforeEach(() => agentMock.suggestAllocation.mockReset());
+
+  describe('generateStarters', () => {
+    it('returns valid Σ=10000 starters for the profile', () => {
+      const starters = make().generateStarters('Moderate');
+      expect(starters).toHaveLength(3);
+      for (const s of starters) {
+        expect(s.profile).toBe('Moderate');
+        expect(allocationSumBps(s.allocation)).toBe(10000);
+        expect(s.targetYear).toBeGreaterThan(new Date().getFullYear());
+      }
+    });
+  });
+
+  describe('suggest', () => {
+    const goal = {
+      profile: 'Aggressive' as const,
+      targetAmountUsd: '1',
+      targetYear: 2040,
+    };
+
+    it('returns the agent suggestion when valid', async () => {
+      agentMock.suggestAllocation.mockResolvedValue({
+        allocation: { mBTC: 6000, mUSDC: 4000 },
+        rationale: 'ok',
+      });
+      const res = await make().suggest(goal);
+      expect(res.allocation).toEqual({ mBTC: 6000, mUSDC: 4000 });
+    });
+
+    it('falls back to a valid preset when the agent fails', async () => {
+      agentMock.suggestAllocation.mockRejectedValue(new Error('no key'));
+      const res = await make().suggest(goal);
+      expect(isValidAllocation(res.allocation)).toBe(true);
+      expect(res.rationale).toContain('preset');
+    });
+
+    it('falls back when the agent returns an invalid allocation', async () => {
+      agentMock.suggestAllocation.mockResolvedValue({
+        allocation: { mBTC: 1234 },
+        rationale: 'bad',
+      });
+      const res = await make().suggest(goal);
+      expect(isValidAllocation(res.allocation)).toBe(true);
+    });
+  });
+});
