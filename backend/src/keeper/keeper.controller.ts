@@ -1,0 +1,35 @@
+import { Body, Controller, Param, Post } from '@nestjs/common';
+import { KeeperService } from './keeper.service';
+import { OracleOverrideDto } from './dto/oracle-override.dto';
+import { FaucetDto } from './dto/faucet.dto';
+
+/**
+ * Demo controls (testnet). Keep these working (golden rule: demo-readiness).
+ * They let the rebalance + agent rationale be shown live on stage.
+ */
+@Controller()
+export class KeeperController {
+  constructor(private readonly keeper: KeeperService) {}
+
+  /** Manually set a mock price (logged source=manual-override). */
+  @Post('keeper/oracle/override')
+  async override(@Body() dto: OracleOverrideDto): Promise<{ ok: true }> {
+    await this.keeper.setOracleOverride(dto.token, BigInt(dto.price));
+    return { ok: true };
+  }
+
+  /** Trigger a rebalance now without waiting for the loop. */
+  @Post('keeper/rebalance/:vault')
+  rebalanceNow(
+    @Param('vault') vault: string,
+  ): Promise<{ executed: boolean; reason: string }> {
+    return this.keeper.triggerRebalance(vault, { force: true });
+  }
+
+  /** Mint test mUSDC. */
+  @Post('faucet/musdc')
+  async faucet(@Body() dto: FaucetDto): Promise<{ ok: true }> {
+    await this.keeper.faucet(dto.owner, BigInt(dto.amount));
+    return { ok: true };
+  }
+}

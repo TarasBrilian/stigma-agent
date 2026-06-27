@@ -1,0 +1,136 @@
+// Stigma Agent — backend data model.
+//
+// The DB holds PII, text, history, and display-only derived values ONLY.
+// On-chain state (balances, computed glide target, config) is read LIVE from
+// the contracts via the `chain` module — never treated as source of truth here.
+//
+// Money: USD stored as Decimal(38,6) (exact, never float). Weights: bps (Int),
+// Σ = 10000. The API converts to/from the raw 6-dp string the frontend uses.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RiskProfile {
+  Conservative
+  Moderate
+  Aggressive
+}
+
+enum PriceSource {
+  keeper
+  manual_override
+}
+
+enum ChatRole {
+  user
+  agent
+}
+
+model User {
+  id            String          @id @default(cuid())
+  walletAddress String          @unique
+  createdAt     DateTime        @default(now())
+  answers       Answer[]
+  profiles      Profile[]
+  portfolios    PortfolioMeta[]
+}
+
+model Questionnaire {
+  id        String   @id @default(cuid())
+  version   Int
+  questions Json
+  createdAt DateTime @default(now())
+  answers   Answer[]
+}
+
+model Answer {
+  id              String         @id @default(cuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id])
+  questionnaireId String?
+  questionnaire   Questionnaire? @relation(fields: [questionnaireId], references: [id])
+  answers         Json
+  demographics    Json
+  createdAt       DateTime       @default(now())
+}
+
+model Profile {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  profile   RiskProfile
+  reasoning String
+  score     Int?
+  createdAt DateTime    @default(now())
+}
+
+model PortfolioMeta {
+  id              String           @id @default(cuid())
+  vaultHash       String           @unique
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+  name            String
+  profile         RiskProfile
+  // The growth-tilted start allocation chosen at creation (bps, Σ = 10000).
+  baseAllocation  Json
+  targetAmountUsd Decimal          @db.Decimal(38, 6)
+  targetYear      Int
+  createdYear     Int
+  createdAt       DateTime         @default(now())
+  rebalanceLogs   RebalanceLog[]
+  chatMessages    ChatMessage[]
+  projection      ProjectionCache?
+}
+
+model RebalanceLog {
+  id          String        @id @default(cuid())
+  vaultHash   String
+  portfolio   PortfolioMeta @relation(fields: [vaultHash], references: [vaultHash])
+  timestamp   DateTime      @default(now())
+  preWeights  Json
+  postWeights Json
+  swaps       Json
+  // The agent's natural-language explanation (display-only).
+  rationale   String
+  x402Receipt String?
+
+  @@index([vaultHash, timestamp])
+}
+
+model PriceLog {
+  id        String      @id @default(cuid())
+  token     String
+  price     Decimal     @db.Decimal(38, 6)
+  source    PriceSource
+  createdAt DateTime    @default(now())
+
+  @@index([token, createdAt])
+}
+
+model ChatMessage {
+  id        String        @id @default(cuid())
+  vaultHash String
+  portfolio PortfolioMeta @relation(fields: [vaultHash], references: [vaultHash])
+  role      ChatRole
+  content   String
+  createdAt DateTime      @default(now())
+
+  @@index([vaultHash, createdAt])
+}
+
+model ProjectionCache {
+  id                  String        @id @default(cuid())
+  vaultHash           String        @unique
+  portfolio           PortfolioMeta @relation(fields: [vaultHash], references: [vaultHash])
+  requiredMonthlyUsd  Decimal       @db.Decimal(38, 6)
+  onTrack             Boolean
+  returnAssumptionBps Int
+  yearsLeft           Float
+  updatedAt           DateTime      @updatedAt
+}
