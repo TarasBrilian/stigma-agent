@@ -8,3 +8,6 @@ pub mod registry;
 pub mod router;
 pub mod token;
 pub mod vault;
+
+#[cfg(test)]
+mod tests;
