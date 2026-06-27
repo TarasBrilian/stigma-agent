@@ -9,3 +9,6 @@ fqn = "stigma_contracts::router::Router"
 
 [[contracts]]
 fqn = "stigma_contracts::registry::VaultRegistry"
+
+[[contracts]]
+fqn = "stigma_contracts::vault::Vault"

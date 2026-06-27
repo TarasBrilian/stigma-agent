@@ -7,3 +7,4 @@ pub mod oracle;
 pub mod registry;
 pub mod router;
 pub mod token;
+pub mod vault;
