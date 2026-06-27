@@ -1,0 +1,38 @@
+# ---- Dependencies ----
+node_modules/
+.pnpm-store/
+
+# ---- Builds / outputs ----
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# ---- Rust / WASM (contract) ----
+target/
+wasm/
+**/Cargo.lock.bak
+
+# ---- Env & secrets (NEVER commit) ----
+.env
+.env.local
+.env.*.local
+**/secrets/
+*.pem
+*.key
+
+# ---- Casper deploy artifacts ----
+**/deployed.*.json
+
+# ---- Logs ----
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
