@@ -27,7 +27,8 @@ interface ChatMsg {
 export class AgentService {
   private readonly logger = new Logger(AgentService.name);
   private readonly apiKey = process.env.OPENROUTER_API_KEY ?? '';
-  private readonly model = process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o-mini';
+  private readonly model =
+    process.env.OPENROUTER_MODEL ?? 'openai/gpt-oss-120b:free';
 
   /** Low-level chat completion against OpenRouter. */
   private async complete(messages: ChatMsg[]): Promise<string> {
