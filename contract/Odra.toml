@@ -1,0 +1,11 @@
+[[contracts]]
+fqn = "stigma_contracts::token::MockToken"
+
+[[contracts]]
+fqn = "stigma_contracts::oracle::PriceOracle"
+
+[[contracts]]
+fqn = "stigma_contracts::router::Router"
+
+[[contracts]]
+fqn = "stigma_contracts::registry::VaultRegistry"
