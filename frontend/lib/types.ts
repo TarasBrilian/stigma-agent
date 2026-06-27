@@ -74,6 +74,8 @@ export interface PortfolioState extends PortfolioMeta {
   currentTargetAllocation: Allocation;
   /** Total portfolio value in USD (6 dp). */
   totalValueUsd: Usd6;
+  /** Progress toward the goal in bps (value / targetAmount), computed by backend. */
+  progressBps: number;
 }
 
 /** Dashboard list item. */
