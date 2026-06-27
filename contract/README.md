@@ -29,21 +29,36 @@ This is the correct design for the problem (mock assets need a mock price source
 ## Layout
 
 ```
-contract/
-├── Cargo.toml              # cargo workspace
-├── vault/                  # VaultFactory + Vault
-├── mock-token/             # CEP-18 tokens
-├── mock-oracle/            # PriceOracle
-├── mock-router/            # Router
-├── scripts/                # deploy + hash-export scripts
-├── README.md
-├── CLAUDE.md
-└── ARCHITECTURE.md
+contract/                   # one Odra crate (cargo-odra's project model)
+├── Cargo.toml · Odra.toml  # deps + the list of deployable contracts
+├── build.rs · bin/         # Odra build/schema entrypoints
+├── rust-toolchain          # pinned nightly that Odra builds with
+├── src/
+│   ├── constants.rs        # glide-path math + profiles (pure, unit-tested)
+│   ├── token.rs            # MockToken (CEP-18 + mint/burn + faucet)
+│   ├── oracle.rs           # PriceOracle
+│   ├── router.rs           # Router
+│   ├── vault.rs            # Vault (deposit/execute_buy/rebalance/withdraw/view_state)
+│   ├── registry.rs         # VaultRegistry (owner -> vaults)
+│   └── tests.rs            # OdraVM integration tests
+├── scripts/deploy.sh
+└── README.md · CLAUDE.md · ARCHITECTURE.md
 ```
+
+## Implementation notes (where the scaffold meets Casper reality)
+
+A few deviations from the spec above, driven by what Casper/Odra actually supports — the security model and glide logic are unchanged:
+
+- **Single Odra crate, not a multi-crate workspace.** `cargo-odra` builds one Odra project; the contracts are organized as modules in `src/` and listed in `Odra.toml`.
+- **`VaultFactory` → `VaultRegistry`.** Casper has no on-chain contract-creates-contract primitive (no EVM `CREATE`). Each `Vault` is deployed individually and recorded in the registry; it still has its own `owner` + `agent` and custodies its own funds.
+- **Years are `u32`** (Casper's `CLType` has no `U16`).
+- **Mock tokens use 6 decimals**, matching the 6-dp prices, so the router's `amount_in * price_in / price_out` stays in 6-dp units.
+- **Per-leg partial fills (ARCHITECTURE §7) aren't implemented.** The mock router prices off the same oracle, so a swap never misses its `min_out`; real slippage/partial-fill handling is a production concern.
 
 ## Prerequisites
 
-- Rust (stable)
+- Rust (the pinned nightly in `rust-toolchain` is selected automatically)
+- `rustup target add wasm32-unknown-unknown` (on that toolchain)
 - `cargo install cargo-odra`
 - `casper-client` (for deploying to testnet)
 - A funded Casper **testnet** key (from the [faucet](https://testnet.cspr.live/tools/faucet)) for deploy fees
@@ -65,10 +80,12 @@ cargo odra test -b casper    # run against a Casper backend (slower, closer to r
 
 After deploying, **export the contract hashes** and propagate them to the other layers:
 
-- `../backend/.env` — `VAULT_FACTORY_HASH`, `ORACLE_HASH`, `ROUTER_HASH`, `TOKEN_*_HASH`
+- `../backend/.env` — `VAULT_REGISTRY_HASH`, `ORACLE_HASH`, `ROUTER_HASH`, `TOKEN_*_HASH`
 - `../frontend/.env` — any hashes the UI needs for display
 
-The deploy script writes a `deployed.<network>.json` you can copy from.
+`./scripts/deploy.sh` builds the WASM and prints the ordered deploy + wiring +
+hash-export plan; submit the deploys with `casper-client` (or an Odra livenet
+runner) and a funded key, then record the hashes above.
 
 ## Key numbers (must match the other layers)
 
