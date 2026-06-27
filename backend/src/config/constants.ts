@@ -50,3 +50,47 @@ export const KEEPER = {
 
 /** x402 micro-fee on rebalance only (bps of portfolio value). */
 export const X402_FEE_BPS = 10; // 0.1%
+
+/**
+ * Assumed CEP-18 token decimals for the mock assets, used to convert raw token
+ * holdings × oracle price into USD (6 dp). Confirm against `../contract` once the
+ * tokens are deployed — a mismatch would distort DISPLAYED value (never an
+ * executed amount; those are derived in-contract).
+ */
+export const TOKEN_DECIMALS = 6;
+
+/** Short human blurb per profile (display + starter rationale). */
+export const PROFILE_BLURB: Record<Profile, string> = {
+  Conservative:
+    'Capital preservation first; gold + stablecoin heavy, de-risks early.',
+  Moderate:
+    'Balanced growth with a glide toward gold + stablecoin near the goal.',
+  Aggressive:
+    'Growth-tilted (BTC/equities) early, still de-risking toward the goal.',
+};
+
+/**
+ * Suggested growth-tilted START allocation per profile (bps, Σ = 10000) — the
+ * `base_allocation` we PROPOSE at vault creation. This is a suggestion: it is
+ * user-editable and the contract is authoritative (it re-validates Σ == 10000
+ * and asset membership). The glide-adjusted CURRENT target is computed on-chain
+ * and read via `chain.viewState` — never derived from this. Mirrors the "Start"
+ * column in `../contract/ARCHITECTURE.md` §5.
+ */
+export const STARTER_ALLOCATION_BPS: Record<Profile, Record<string, number>> = {
+  Conservative: {
+    mXAUT: 4000,
+    mUSDC: 3000,
+    mBTC: 1000,
+    mNVDAx: 1000,
+    mGOOGLx: 1000,
+  },
+  Moderate: { mBTC: 2000, mNVDAx: 3000, mXAUT: 4000, mGOOGLx: 1000 },
+  Aggressive: { mBTC: 4000, mNVDAx: 3500, mGOOGLx: 1500, mXAUT: 1000 },
+};
+
+/** Horizons (years from now) used to generate a few starter portfolios. */
+export const STARTER_HORIZONS_YEARS = [5, 10, 20];
+
+/** Default goal amount for generated starters (raw USD, 6 dp) = $100,000. */
+export const STARTER_DEFAULT_TARGET_USD6 = '100000000000';
