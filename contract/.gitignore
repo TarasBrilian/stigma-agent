@@ -1,0 +1,9 @@
+/casper_account.pem
+
+# Odra / Rust build artifacts (root .gitignore also covers target/ and wasm/)
+/target
+/wasm
+Cargo.lock
+.builder*
+.backend*
+.env
