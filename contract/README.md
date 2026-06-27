@@ -108,6 +108,39 @@ It deploys the 5 tokens + oracle + router + registry, wires `set_minter`/`set_pr
 and prints every contract hash to paste into the env files above. (~250 CSPR per
 install on testnet.)
 
+## Deployed addresses (casper-test)
+
+Live on the Casper **testnet** (`casper-test`, node `https://node.testnet.casper.network/rpc`).
+Deployer account `account-hash-b9f3740ef94e78a56f86fa795a6fd136f432164e3c1915284bc2636b7cf933b8`.
+Each token is wired with the Router as mint/burn authority and seeded with a 6-dp
+reference price. (Also recorded in the gitignored `deployed.casper-test.json`.)
+
+| Contract | Hash | Explorer |
+| --- | --- | --- |
+| `PriceOracle` | `hash-b7a88105f1895aade1eddff75da751ddb31e7c53ddd5876fb1946b48337a6369` | [↗](https://testnet.cspr.live/contract-package/b7a88105f1895aade1eddff75da751ddb31e7c53ddd5876fb1946b48337a6369) |
+| `Router` | `hash-8a415764e5062ad3f228b013f986dd529cb1f311858f2b84756c1946432e5cf3` | [↗](https://testnet.cspr.live/contract-package/8a415764e5062ad3f228b013f986dd529cb1f311858f2b84756c1946432e5cf3) |
+| `VaultRegistry` | `hash-70bcab28a355285261a86a718fa9e4a52b3986797b0d8de8eadbcb3d672f112e` | [↗](https://testnet.cspr.live/contract-package/70bcab28a355285261a86a718fa9e4a52b3986797b0d8de8eadbcb3d672f112e) |
+| `mUSDC` (faucet) | `hash-4847bc198c6641daf3c8ac40211a8180800d630fb756ab7911ffc0eb81310a9b` | [↗](https://testnet.cspr.live/contract-package/4847bc198c6641daf3c8ac40211a8180800d630fb756ab7911ffc0eb81310a9b) |
+| `mBTC` | `hash-f8f4931076a8766061319e9c277151b8aa5f9c96c50bf5304443a4cc8ff52370` | [↗](https://testnet.cspr.live/contract-package/f8f4931076a8766061319e9c277151b8aa5f9c96c50bf5304443a4cc8ff52370) |
+| `mNVDAx` | `hash-9a3d90b3ce61ae24533ba84b6a800faeb7199787f2cf77f476cb870b0aaadf1a` | [↗](https://testnet.cspr.live/contract-package/9a3d90b3ce61ae24533ba84b6a800faeb7199787f2cf77f476cb870b0aaadf1a) |
+| `mXAUT` | `hash-52596790c10528740a44d028eab13360ea12cc4ff953521e0a7802fdfab2accf` | [↗](https://testnet.cspr.live/contract-package/52596790c10528740a44d028eab13360ea12cc4ff953521e0a7802fdfab2accf) |
+| `mGOOGLx` | `hash-84e72cd3ba99d5dab36fc1dd80e64a5c1e581e1a5296b4378fe1a6d1948779a5` | [↗](https://testnet.cspr.live/contract-package/84e72cd3ba99d5dab36fc1dd80e64a5c1e581e1a5296b4378fe1a6d1948779a5) |
+
+Canonical asset order is `[mUSDC, mBTC, mNVDAx, mXAUT, mGOOGLx]`. For the backend/frontend `.env`:
+
+```
+CASPER_NODE_URL=https://node.testnet.casper.network/rpc
+CASPER_NETWORK_NAME=casper-test
+ORACLE_HASH=hash-b7a88105f1895aade1eddff75da751ddb31e7c53ddd5876fb1946b48337a6369
+ROUTER_HASH=hash-8a415764e5062ad3f228b013f986dd529cb1f311858f2b84756c1946432e5cf3
+VAULT_REGISTRY_HASH=hash-70bcab28a355285261a86a718fa9e4a52b3986797b0d8de8eadbcb3d672f112e
+TOKEN_MUSDC_HASH=hash-4847bc198c6641daf3c8ac40211a8180800d630fb756ab7911ffc0eb81310a9b
+TOKEN_MBTC_HASH=hash-f8f4931076a8766061319e9c277151b8aa5f9c96c50bf5304443a4cc8ff52370
+TOKEN_MNVDAX_HASH=hash-9a3d90b3ce61ae24533ba84b6a800faeb7199787f2cf77f476cb870b0aaadf1a
+TOKEN_MXAUT_HASH=hash-52596790c10528740a44d028eab13360ea12cc4ff953521e0a7802fdfab2accf
+TOKEN_MGOOGLX_HASH=hash-84e72cd3ba99d5dab36fc1dd80e64a5c1e581e1a5296b4378fe1a6d1948779a5
+```
+
 ## Key numbers (must match the other layers)
 
 - **Allocations** in basis points, Σ = `10000`.
