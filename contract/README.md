@@ -84,8 +84,29 @@ After deploying, **export the contract hashes** and propagate them to the other 
 - `../frontend/.env` — any hashes the UI needs for display
 
 `./scripts/deploy.sh` builds the WASM and prints the ordered deploy + wiring +
-hash-export plan; submit the deploys with `casper-client` (or an Odra livenet
-runner) and a funded key, then record the hashes above.
+hash-export plan.
+
+To deploy directly, use the bundled **Odra livenet runner**. Create `contract/.env`
+with a funded testnet key:
+
+```
+ODRA_CASPER_LIVENET_NODE_ADDRESS=https://node.testnet.casper.network/rpc
+ODRA_CASPER_LIVENET_CHAIN_NAME=casper-test
+ODRA_CASPER_LIVENET_SECRET_KEY_PATH=casper_account.pem
+ODRA_CASPER_LIVENET_EVENTS_URL=https://node.testnet.casper.network/events
+```
+
+then, from `contract/`:
+
+```bash
+cargo odra build
+cargo run --bin livenet_deploy --features livenet -- preflight   # print deployer (no gas)
+cargo run --bin livenet_deploy --features livenet                # deploy all + wire
+```
+
+It deploys the 5 tokens + oracle + router + registry, wires `set_minter`/`set_price`,
+and prints every contract hash to paste into the env files above. (~250 CSPR per
+install on testnet.)
 
 ## Key numbers (must match the other layers)
 
