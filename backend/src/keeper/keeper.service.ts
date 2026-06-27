@@ -11,6 +11,7 @@ import {
   KEEPER,
   type AssetSymbol,
 } from '../config/constants';
+import { valueUsd6, weightsBps } from '../config/money';
 
 interface RebalanceDecision {
   due: boolean;
@@ -98,22 +99,22 @@ export class KeeperService {
         return { executed: false, reason: decision.reason };
       }
 
-      const totalValue = this.totalValueUsd6(state, prices);
+      const totalValue = valueUsd6(state.holdings, prices);
       const fee = await this.billing.chargeRebalanceFee(vaultHash, totalValue);
       await this.chain.rebalance(vaultHash);
 
       const post = await this.chain.viewState(vaultHash);
       const rationale = await this.agent.explainRebalance({
-        preWeights: this.currentWeightsBps(state, prices),
-        postWeights: this.currentWeightsBps(post, prices),
+        preWeights: weightsBps(state.holdings, prices),
+        postWeights: weightsBps(post.holdings, prices),
         swaps: [],
       });
 
       await this.prisma.rebalanceLog.create({
         data: {
           vaultHash,
-          preWeights: this.currentWeightsBps(state, prices),
-          postWeights: this.currentWeightsBps(post, prices),
+          preWeights: weightsBps(state.holdings, prices),
+          postWeights: weightsBps(post.holdings, prices),
           swaps: [],
           rationale,
           x402Receipt: fee.receipt,
@@ -127,7 +128,10 @@ export class KeeperService {
 
   /* ----------------------------- demo actions ----------------------------- */
 
-  async setOracleOverride(token: AssetSymbol, priceUsd6: bigint): Promise<void> {
+  async setOracleOverride(
+    token: AssetSymbol,
+    priceUsd6: bigint,
+  ): Promise<void> {
     // Logged with source=manual-override by the chain/price layer.
     await this.chain.setPrice(token, priceUsd6);
   }
@@ -144,8 +148,8 @@ export class KeeperService {
     prices: Record<AssetSymbol, bigint>,
     lastRebalanceAt: Date | null,
   ): RebalanceDecision {
-    const total = this.totalValueUsd6(state, prices);
-    const current = this.currentWeightsBps(state, prices);
+    const total = valueUsd6(state.holdings, prices);
+    const current = weightsBps(state.holdings, prices);
     const target = state.currentTargetAllocation;
 
     let maxDriftBps = 0;
@@ -185,33 +189,5 @@ export class KeeperService {
       select: { timestamp: true },
     });
     return last?.timestamp ?? null;
-  }
-
-  /** Total portfolio value in raw USD (6 dp). */
-  private totalValueUsd6(
-    state: VaultState,
-    prices: Record<AssetSymbol, bigint>,
-  ): bigint {
-    let total = 0n;
-    for (const asset of ASSET_SYMBOLS) {
-      const holding = BigInt(state.holdings[asset] ?? '0');
-      total += holding * (prices[asset] ?? 0n);
-    }
-    return total;
-  }
-
-  /** Current weights in bps from holdings × prices (ratio — scale cancels). */
-  private currentWeightsBps(
-    state: VaultState,
-    prices: Record<AssetSymbol, bigint>,
-  ): Record<string, number> {
-    const total = this.totalValueUsd6(state, prices);
-    const weights: Record<string, number> = {};
-    if (total === 0n) return weights;
-    for (const asset of ASSET_SYMBOLS) {
-      const value = BigInt(state.holdings[asset] ?? '0') * (prices[asset] ?? 0n);
-      weights[asset] = Number((value * 10_000n) / total);
-    }
-    return weights;
   }
 }
