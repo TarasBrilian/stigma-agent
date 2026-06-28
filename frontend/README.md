@@ -53,10 +53,18 @@ Only public (`NEXT_PUBLIC_*`) values — **no secrets in the frontend**.
 ```dotenv
 NEXT_PUBLIC_API_URL=http://localhost:3001
 NEXT_PUBLIC_CASPER_NETWORK=casper-test
-NEXT_PUBLIC_CSPR_CLICK_APP_ID=...
-# contract hashes the UI needs for display (from ../contract deploy output)
-NEXT_PUBLIC_VAULT_FACTORY_HASH=hash-...
+NEXT_PUBLIC_CASPER_NODE_URL=https://node.testnet.casper.network/rpc
+# Contract hashes the UI passes to `Vault::init` when the USER signs the
+# create-vault deploy (ADR 0001). Public testnet hashes from
+# ../contract/deployed.casper-test.json. NO registry hash — the backend calls
+# VaultRegistry.register; all reads go through the backend.
+NEXT_PUBLIC_AGENT_PUBLIC_KEY=...        # the agent PUBLIC key (not a secret)
+NEXT_PUBLIC_ORACLE_HASH=hash-...
+NEXT_PUBLIC_ROUTER_HASH=hash-...
+NEXT_PUBLIC_TOKEN_MUSDC_HASH=hash-...   # + MBTC, MNVDAX, MXAUT, MGOOGLX (see .env.example)
 ```
+
+See [`.env.example`](.env.example) for the complete list with prefilled values.
 
 ## How it connects
 

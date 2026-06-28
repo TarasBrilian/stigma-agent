@@ -70,12 +70,19 @@ snapshot) depends on these two reads. Implement them first.
 ### P0 · Vault creation & registration path (align with frontend + contract)
 A vault must exist before any deposit/buy. Decide and implement the creation path
 consistently across layers; today only the off-chain metadata mirror exists.
-- [ ] Agree the path with frontend + contract: **user-signed** vault deploy vs
+- [x] Agree the path with frontend + contract: **user-signed** vault deploy vs
       **backend-deployed** (add `chain.deployVault` with the deployer/agent key).
-      ref: `../../contract/docs/TASK.md` (per-vault deploy runner); `../../frontend/docs/TASK.md` (create-vault flow)
-- [ ] Ensure the **on-chain** `VaultRegistry.register(owner, vault)` is called by the agreed
-      party — this is distinct from the off-chain metadata mirror.
-      ref: `../../contract/src/registry.rs:28` (on-chain registry); `src/portfolio/portfolio.service.ts:65` (off-chain `POST /portfolios`)
+      DECIDED: **user-signed `Vault` deploy + backend-signed `register`** — see
+      [`../../docs/decisions/0001-vault-creation-path.md`](../../docs/decisions/0001-vault-creation-path.md).
+      The user becomes deployer + `owner`; the backend calls the permissionless,
+      fund-free `register` (NOT the agent key) using the vault address the frontend
+      reports. `chain.deployVault` is the documented FALLBACK only, not the accepted path.
+- [ ] Add `chain.register(owner, vault)` — a permissionless, no-funds call (no agent
+      key required). There is **no chain event to observe a vault deploy** (`init`
+      emits nothing; `VaultRegistered` only fires *from* `register`), so the frontend
+      reports the new vault address via `POST /portfolios`; call `register` from that
+      handler, then save the off-chain `PortfolioMeta` mirror in the same handler.
+      ref: `../../contract/src/registry.rs:28` (on-chain registry); `src/portfolio/portfolio.service.ts:65` (off-chain `POST /portfolios` handler)
       done: a created vault is on-chain, in the registry, and mirrored in Postgres; `GET /portfolios?owner=` lists it
       🔴 golden rule #4 (deploying/registering a vault is fine; never put the agent key on a withdraw/fund-moving path)
 

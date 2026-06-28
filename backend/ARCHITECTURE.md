@@ -134,7 +134,7 @@ On-chain state (balances, computed target, config) is **read live from the contr
 ## 6. Flows (backend perspective)
 
 ### Onboarding
-`POST /onboarding/answers` → `agent.profile()` → derive starter targets from demographics → `agent.suggestAllocation()` per portfolio → return profile + starters. Vault creation itself is **user-signed in the frontend**; the backend then records `PortfolioMeta`.
+`POST /onboarding/answers` → `agent.profile()` → derive starter targets from demographics → `agent.suggestAllocation()` per portfolio → return profile + starters. Vault creation itself is **user-signed in the frontend** (the user signs the `Vault.wasm` deploy and becomes `owner`); the frontend then reports the new vault address to `POST /portfolios`, where the backend calls the permissionless `VaultRegistry.register(owner, vault)` (no agent key) and records the off-chain `PortfolioMeta` mirror. See [`../docs/decisions/0001-vault-creation-path.md`](../docs/decisions/0001-vault-creation-path.md).
 
 ### Deposit → buy
 The frontend submits the user-signed `deposit`. The keeper/chain module observes the `Deposited` event (CSPR.cloud Streaming) and calls `chain.executeBuy(vault)` with the **agent key** (amounts computed in-contract).
