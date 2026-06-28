@@ -35,17 +35,38 @@ below. The two are independent — frontend write work can proceed in parallel.
 ### P0 · Implement the user-action deploy builders (`lib/casper.ts`)
 All four builders throw today and the architectural seam matters: there is **no
 `VaultFactory`** — the contract uses a `VaultRegistry`, so "create vault" means
-deploying the `Vault` WASM module with init args, then `registry.register`.
-- [ ] **Decide the vault-creation path with the backend**: user-signed module deploy
+the user signs a `Vault` WASM module-bytes deploy with init args; the **backend**
+then calls `registry.register` (the UI does not — see ADR 0001).
+- [x] **Decide the vault-creation path with the backend**: user-signed module deploy
       (ship `Vault.wasm`, build a module-bytes deploy) vs backend-deployed + user owns it.
-      ref: `lib/casper.ts:79` (`buildCreateVaultDeploy` — comment still says `VaultFactory.create_vault`)
+      DECIDED: **user-signed module-bytes deploy** of `Vault.wasm` (user = deployer +
+      `owner`); the backend calls the permissionless `register` afterward — the user
+      does NOT sign register. See
+      [`../../docs/decisions/0001-vault-creation-path.md`](../../docs/decisions/0001-vault-creation-path.md).
+      Next: `buildCreateVaultDeploy` builds the module-bytes deploy with init args
+      (owner = connected user, agent = `env.agentPublicKey`, profile, base_allocation,
+      target_amount_usd, target_year, oracle = `env.oracleHash`, router = `env.routerHash`,
+      assets = the 5 `env.tokenHashes`). The stale `VaultFactory.create_vault` comment at
+      `lib/casper.ts:83` was already replaced with the ADR-0001 plan (P0-2).
+      ref: `lib/casper.ts:79` (`buildCreateVaultDeploy` — body still throws; env accessors ready)
       done: a documented decision; the builder matches it
 - [ ] Implement `buildDepositDeploy` (the demo entry point — fund an existing vault).
       ref: `lib/casper.ts:89`  🔴 golden rule #1 (build USER actions only)
       done: returns a valid unsigned `Deploy` calling `Vault.deposit(amount)` with CLValue args
-- [ ] Fix the factory→registry env drift, and add the `mUSDC` token hash the deposit `approve` needs.
-      ref: `lib/constants.ts:41` (`vaultFactoryHash`), `.env.example:15` (`NEXT_PUBLIC_VAULT_FACTORY_HASH`)
-      done: accessor/env renamed to `…VAULT_REGISTRY_HASH` and `…TOKEN_MUSDC_HASH` added; values sourced from the contract deploy output
+- [x] Fix the env to match ADR 0001. Under user-signed creation the UI does **not** need a
+      registry hash (the backend calls `register`; reads go via backend) — so **remove**
+      `NEXT_PUBLIC_VAULT_FACTORY_HASH` rather than renaming it. Add what `Vault::init` needs:
+      `NEXT_PUBLIC_AGENT_PUBLIC_KEY`, `…_ORACLE_HASH`, `…_ROUTER_HASH`, and the **5 asset token
+      hashes** (`…_TOKEN_MUSDC_HASH` + the four assets); `TOKEN_MUSDC_HASH` also covers the
+      deposit `approve`.
+      DONE: `lib/constants.ts` `env` now exposes `agentPublicKey`, `oracleHash`, `routerHash`,
+      and `tokenHashes` (5, canonical order) as static `NEXT_PUBLIC_*` reads; `vaultFactoryHash`
+      removed. `.env.example` carries the full set (oracle/router/5 tokens prefilled from
+      `deployed.casper-test.json`; agent key left as a placeholder). `tsc --noEmit` + `eslint` clean.
+      ref: `lib/constants.ts:35` (`env`), `.env.example`, `lib/casper.ts:83` (builder comment updated);
+      `../../docs/decisions/0001-vault-creation-path.md`
+      STILL TODO (belongs to the builder task, not env): how the UI obtains the `Vault.wasm`
+      bytes (static asset/public path) for the module-bytes deploy.
 
 ### P0 · Sign & submit plumbing (`lib/casper.ts`)
 - [ ] Serialize the `Deploy` to the JSON shape Casper Wallet expects in `signDeployWithWallet`,
@@ -59,11 +80,13 @@ deploying the `Vault` WASM module with init args, then `registry.register`.
 `QuestionnaireForm` ends at displaying the profile + a starter count; there is no
 path from there to actually creating a vault.
 - [ ] After the profile result, let the user pick/edit a starter allocation, then run the
-      agreed creation path: vault deploy **+ on-chain `VaultRegistry.register`**, then
-      `api.register` (`POST /portfolios`) for the **off-chain** mirror (two different "register"s).
-      ref: `components/QuestionnaireForm.tsx:49-60` (result view dead-ends); `lib/api.ts` (no `register` method yet — add it); `../../backend/docs/TASK.md` (creation-path decision)
-      🔴 golden rule #1 (user actions only) · #2 (allocation edited as bps, validated on-chain; UI only formats)
-      done: onboarding → vault created, registered on-chain, mirrored in Postgres → it appears on `/dashboard`
+      agreed creation path (ADR 0001): user signs the `Vault.wasm` deploy, the UI reads the
+      new vault address from the deploy result, then calls `api.register` (`POST /portfolios`)
+      with `{ owner, vault, ... }`. The **backend** performs the on-chain `VaultRegistry.register`
+      AND the off-chain mirror in that handler — the UI does **not** sign an on-chain register.
+      ref: `components/QuestionnaireForm.tsx:49-60` (result view dead-ends); `lib/api.ts` (no `register` method yet — add it); `../../docs/decisions/0001-vault-creation-path.md`
+      🔴 golden rule #1 (user actions only — the on-chain register is backend's, not the UI's) · #2 (allocation edited as bps, validated on-chain; UI only formats)
+      done: onboarding → user-signed vault deploy → address reported to backend → registered on-chain + mirrored in Postgres → it appears on `/dashboard`
 
 ### P0 · Deposit flow — approve + deposit (two signed deploys; none exists today)
 `Vault.deposit` calls `transfer_from(owner → vault)`, so the owner must FIRST

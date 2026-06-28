@@ -20,7 +20,7 @@ This is the correct design for the problem (mock assets need a mock price source
 
 | Contract | Purpose |
 | --- | --- |
-| `VaultFactory` | Creates per-portfolio vaults; sets `owner` (user) and `agent`. |
+| `VaultRegistry` | Records per-owner vaults (`register` / `list_vaults`). No factory — each `Vault` is deployed individually (user-signed; see [ADR 0001](../docs/decisions/0001-vault-creation-path.md)). |
 | `Vault` | Holds a portfolio's assets; deposit/buy/rebalance/withdraw; computes the current glide target in-contract. |
 | `PriceOracle` (mock) | `set_price` / `get_price`; single source of price truth. |
 | `Router` (mock) | `swap(token_in, token_out, amount_in, min_out)` priced off the oracle. |

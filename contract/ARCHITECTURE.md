@@ -8,10 +8,18 @@ All contracts are Odra modules → WASM. Money is fixed-point (USD, 6 dp); weigh
 
 ## 1. Contract set & relationships
 
+> **Vault creation is a user-signed `Vault.wasm` deploy, not a factory call.**
+> Casper has no contract-deploys-contract primitive, so there is no
+> `VaultFactory`. The user signs the `Vault` module-bytes deploy (becoming
+> deployer + `owner`); the backend then records it via the permissionless
+> `VaultRegistry.register(owner, vault)`. See
+> [`../docs/decisions/0001-vault-creation-path.md`](../docs/decisions/0001-vault-creation-path.md)
+> and the feasibility note in [`src/registry.rs`](src/registry.rs).
+
 ```mermaid
 graph TD
-    USER[User / owner] -->|create_vault| FACT[VaultFactory]
-    FACT -->|deploys| VAULT[Vault]
+    USER[User / owner] -->|signs Vault.wasm deploy| VAULT[Vault]
+    BACKEND[Backend] -->|register owner, vault| REG[VaultRegistry]
     USER -->|deposit / withdraw / update_config| VAULT
     AGENT[Agent key] -->|execute_buy / rebalance| VAULT
     KEEPER[Keeper] -->|set_price| ORACLE[PriceOracle]
@@ -29,7 +37,8 @@ Two distinct authorities act on a `Vault`: **`owner`** (the user) and **`agent`*
 
 | Contract.Function | Allowed caller | Notes |
 | --- | --- | --- |
-| `VaultFactory.create_vault` | anyone | caller becomes `owner`; `agent` set to configured address |
+| `Vault.init` (deploy) | **user** (signs the `Vault.wasm` deploy) | deployer passes `owner` = self, `agent` = configured address; see ADR 0001 |
+| `VaultRegistry.register` | anyone (backend, in practice) | permissionless + idempotent; moves no funds; records `vault` under `owner` |
 | `Vault.deposit` | **owner** | escrows `mUSDC`; does not swap |
 | `Vault.execute_buy` | **agent** | swaps idle `mUSDC` into the current target; slippage-capped |
 | `Vault.rebalance` | **agent** | swaps holdings toward current target; slippage-capped |
@@ -64,12 +73,16 @@ The **current target allocation is not stored** — it is computed on demand fro
 
 ## 4. Interfaces
 
-### VaultFactory
+### VaultRegistry
 ```rust
-fn create_vault(profile, base_allocation, target_amount_usd, target_year) -> Address
+fn register(owner, vault)          // permissionless + idempotent; moves no funds
 fn list_vaults(owner) -> Vec<Address>
 ```
-Validates `sum(base_allocation) == 10000` and every token ∈ allowed asset set. Sets `created_year` from block time.
+There is **no `VaultFactory`** (Casper can't deploy a contract from a contract).
+A vault is created by **user-signing the `Vault.wasm` module-bytes deploy**, then
+the backend calls `register`. See ADR 0001. `Vault::init` (run at deploy time)
+validates `sum(base_allocation) == 10000` and asset membership, and sets
+`created_year` from block time.
 
 ### Vault
 ```rust
@@ -176,7 +189,7 @@ Emit events the backend keeper/indexer listens to (via CSPR.cloud Streaming):
 1. `withdraw` is owner-only; no agent path moves funds out or to an arbitrary address.
 2. Current target is computed in-contract; there is **no** agent-settable allocation.
 3. Every router call passes a hard `min_out`.
-4. `create_vault` / `update_config` validate `sum(allocation) == 10000` and asset membership.
+4. `Vault::init` (at deploy) / `update_config` validate `sum(allocation) == 10000` and asset membership.
 5. Only allowed assets are tradable.
 6. Mock contracts are isolated and obviously named; no mock pricing leaks into vault accounting beyond reading `get_price`.
 

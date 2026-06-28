@@ -80,9 +80,12 @@ export function buildCreateVaultDeploy(
   _publicKeyHex: string,
   _args: CreateVaultArgs,
 ): Deploy {
-  // TODO: build a session deploy calling VaultFactory.create_vault with CLValue
-  // args (profile, base_allocation map, target_amount_usd, target_year) against
-  // env.vaultFactoryHash on env.network.
+  // TODO (ADR 0001): build a MODULE-BYTES (session WASM) deploy of Vault.wasm —
+  // there is no VaultFactory. Pass Vault::init args as CLValues: owner =
+  // _publicKeyHex, agent = env.agentPublicKey, profile, base_allocation,
+  // target_amount_usd, target_year, oracle = env.oracleHash, router =
+  // env.routerHash, assets = [env.tokenHashes.mUSDC, …all 5]. The backend (not
+  // the UI) calls VaultRegistry.register after the deploy is reported.
   throw new Error("buildCreateVaultDeploy: not implemented yet");
 }
 

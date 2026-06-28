@@ -4,7 +4,7 @@ Guidance for AI coding agents working in `contract/`. Read this before changing 
 
 ## Scope of this directory
 
-The Casper on-chain layer (Rust + Odra → WASM): `VaultFactory`, `Vault`, mock `PriceOracle`, mock `Router`, CEP-18 mock tokens. This is the **source of truth for money state** and the place the **glide-path target is computed**. The backend triggers actions and reads the computed target; the frontend reads state. Everything tradable here is **mocked** and **testnet-only** — intentionally.
+The Casper on-chain layer (Rust + Odra → WASM): `Vault`, `VaultRegistry` (there is **no** `VaultFactory` — Casper can't deploy a contract from a contract; each `Vault` is deployed individually, see [ADR 0001](../docs/decisions/0001-vault-creation-path.md)), mock `PriceOracle`, mock `Router`, CEP-18 mock tokens. This is the **source of truth for money state** and the place the **glide-path target is computed**. The backend triggers actions and reads the computed target; the frontend reads state. Everything tradable here is **mocked** and **testnet-only** — intentionally.
 
 ## 🔴 Golden rules — do not violate
 
@@ -21,11 +21,14 @@ If a request conflicts with these, flag it instead of implementing it.
 ## Layout
 
 ```
-Cargo.toml      cargo workspace
-vault/          VaultFactory + Vault   (the important one)
-mock-token/     CEP-18 tokens (mUSDC + assets)
-mock-oracle/    PriceOracle
-mock-router/    Router
+Cargo.toml      single crate (stigma_contracts) — NOT a workspace
+src/vault.rs    Vault                 (the important one)
+src/registry.rs VaultRegistry         (owner -> vaults; no factory)
+src/token.rs    CEP-18 mock tokens (mUSDC + assets)
+src/oracle.rs   PriceOracle (mock)
+src/router.rs   Router (mock)
+src/constants.rs glide math + asset/profile constants
+src/tests.rs    OdraVM tests
 scripts/        deploy + hash export
 ```
 
@@ -36,7 +39,7 @@ cargo odra build            # compile WASM
 cargo odra test             # unit tests on OdraVM (fast — default loop)
 cargo odra test -b casper    # against a Casper backend (slower, closer to real)
 cargo fmt && cargo clippy    # format + lint
-./scripts/deploy.sh casper-test   # deploy in order: tokens -> oracle -> router -> factory
+./scripts/deploy.sh casper-test   # deploy in order: tokens -> oracle -> router -> registry
 ```
 
 Run `cargo odra test` (and `clippy`) before considering a change done.

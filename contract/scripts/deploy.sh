@@ -62,8 +62,14 @@ EXPORT HASHES (propagate downstream — see contract/CLAUDE.md "Hash propagation
      ORACLE_HASH, ROUTER_HASH, VAULT_REGISTRY_HASH,
      TOKEN_MUSDC_HASH, TOKEN_MBTC_HASH, TOKEN_MNVDAX_HASH,
      TOKEN_MXAUT_HASH, TOKEN_MGOOGLX_HASH, AGENT_PUBLIC_KEY
-  ../frontend/.env :
-     NEXT_PUBLIC_VAULT_REGISTRY_HASH (+ any hashes the UI displays)
+  ../frontend/.env  (per ADR 0001 — the USER signs the Vault.wasm deploy, so the
+                     UI needs every Vault::init arg; it does NOT need the registry
+                     hash, since the backend calls register and reads go via backend):
+     NEXT_PUBLIC_AGENT_PUBLIC_KEY, NEXT_PUBLIC_ORACLE_HASH, NEXT_PUBLIC_ROUTER_HASH,
+     NEXT_PUBLIC_TOKEN_MUSDC_HASH, NEXT_PUBLIC_TOKEN_MBTC_HASH,
+     NEXT_PUBLIC_TOKEN_MNVDAX_HASH, NEXT_PUBLIC_TOKEN_MXAUT_HASH,
+     NEXT_PUBLIC_TOKEN_MGOOGLX_HASH
+     (NEXT_PUBLIC_VAULT_FACTORY_HASH is removed — no factory exists.)
 
 PLAN
 

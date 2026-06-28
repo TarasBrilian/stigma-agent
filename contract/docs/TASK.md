@@ -47,8 +47,13 @@ register it** — yet a vault must exist before any deposit/buy/rebalance.
       ref: `scripts/deploy.sh:51-55`; `src/registry.rs:28` (`register`); `src/vault.rs:107` (`init`)
       🔴 golden rule #5 (init validates `Σ == 10000` + asset membership) · #2 (no agent-settable allocation)
       done: a vault is live on testnet; `VaultRegistry.list_vaults(owner)` includes it; `view_state` returns
-- [ ] Decide with frontend/backend **who** signs the vault deploy (user-signed module
+- [x] Decide with frontend/backend **who** signs the vault deploy (user-signed module
       bytes vs backend-deployed). Document it next to the runner.
+      DECIDED: **user-signed `Vault.wasm` module-bytes deploy** (user = deployer +
+      `owner`); the backend then calls the permissionless `VaultRegistry.register`.
+      See [`../../docs/decisions/0001-vault-creation-path.md`](../../docs/decisions/0001-vault-creation-path.md).
+      The per-vault deploy runner above doubles as the runbook for this deploy
+      (same init args/order) and for manual operator testing.
       ref: `../ARCHITECTURE.md` §6 ("Vault creation itself is user-signed")
 
 ### P0 · Validate the deployed wiring actually executes a swap
@@ -64,15 +69,31 @@ seeded, but nothing has exercised a real swap on testnet. `execute_buy` /
 ### P0 · Export & propagate hashes (and kill the factory/registry drift)
 The contract correctly produces `VAULT_REGISTRY_HASH`, but downstream still names
 a factory — a silent mistarget waiting to happen.
-- [ ] Make the deploy flow write/export hashes to `../backend/.env` and `../frontend/.env`
+- [x] Make the deploy flow write/export hashes to `../backend/.env` and `../frontend/.env`
       using the **registry** name everywhere.
-      ref: `scripts/deploy.sh:60-66`; drift lives downstream in `../backend/README.md:60`,
-      `../frontend/lib/constants.ts:41`, `../frontend/.env.example:15`
-      done: both env files carry `VAULT_REGISTRY_HASH` (= `hash-70bcab…f112e`); no `FACTORY` symbol remains anywhere
-- [ ] Propagate the token hashes + `AGENT_PUBLIC_KEY` too: backend needs all five token hashes
-      (`setPrice`/`faucet`) and the agent key; frontend needs at least `TOKEN_MUSDC_HASH` for the deposit `approve`.
-      ref: `scripts/deploy.sh:62-64`; `deployed.casper-test.json` (`tokens`)
-      done: backend `.env` has the 5 token hashes + `AGENT_PUBLIC_KEY`; frontend env has `TOKEN_MUSDC_HASH`
+      DONE: factory drift killed downstream — `../frontend/lib/constants.ts` + `../frontend/.env.example`
+      no longer reference any factory symbol; backend already uses `VAULT_REGISTRY_HASH`. `deploy.sh`
+      EXPORT section lists the correct per-layer var sets (registry name for backend; no registry
+      hash for frontend, per ADR 0001). NOTE: `deploy.sh` still *prints* the export plan rather than
+      auto-writing the env files — on-chain submission stays manual (needs a funded key; can't run in CI).
+      ref: `scripts/deploy.sh:57-73`; `../frontend/lib/constants.ts:35`, `../frontend/.env.example`
+      done: both env files use the registry name (frontend needs none); no `FACTORY` symbol remains in code/env
+- [x] Propagate the token hashes + `AGENT_PUBLIC_KEY` too. Backend needs all five token
+      hashes (`setPrice`/`faucet`) and the agent key. The frontend's need is LARGER under
+      ADR 0001 (user-signed vault deploy): to fill `Vault::init` args the UI needs
+      `AGENT_PUBLIC_KEY`, the **oracle** hash, the **router** hash, and **all 5 asset token
+      hashes** (`assets[5]`) — plus `TOKEN_MUSDC_HASH` for the deposit `approve` and the
+      `Vault.wasm` bytes themselves (ship as a static asset). The frontend does **not** need
+      `VAULT_REGISTRY_HASH` (the backend calls `register`; reads go via backend).
+      ref: `scripts/deploy.sh:62-64`; `deployed.casper-test.json` (`tokens`, `oracle`, `router`);
+      `../../docs/decisions/0001-vault-creation-path.md`; `../src/vault.rs:107` (init args)
+      DONE (templates/accessors): backend `.env.example` already lists the 5 token hashes +
+      `AGENT_PUBLIC_KEY`; frontend `.env.example` now lists `AGENT_PUBLIC_KEY` + oracle + router +
+      5 token hashes (prefilled from `deployed.casper-test.json`, agent key placeholder), and
+      `lib/constants.ts` exposes them. Real `.env` values are operator-supplied at deploy time.
+      STILL TODO (builder task): make `Vault.wasm` fetchable by the UI (static asset/public path).
+      done: backend `.env` has the 5 token hashes + `AGENT_PUBLIC_KEY`; frontend env has
+      `AGENT_PUBLIC_KEY` + oracle + router + 5 token hashes, and `Vault.wasm` is fetchable by the UI
 
 ---
 
