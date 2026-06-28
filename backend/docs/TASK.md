@@ -32,22 +32,30 @@ Nothing renders live value and no agent action fires until `ChainService` is rea
 
 ## 1. Critical path — make the demo work (P0)
 
-### P0 · ChainService: reads (`viewState` + `getPrices`)
+### P0 · ChainService: reads (`viewState` + `getPrices`) — ✅ DONE
 Everything downstream (portfolio display, keeper decision, projection, chat
 snapshot) depends on these two reads. Implement them first.
-- [ ] Instantiate `casper-js-sdk` `RpcClient(new HttpHandler(CASPER_NODE_URL))` once, here only.
-      ref: `src/chain/chain.service.ts:28` (the existing TODO)  🔴 golden rule #2 (chain access lives ONLY in this module)
-- [ ] Implement `viewState(vaultHash)`: query the vault's `view_state` and decode
-      the `VaultState` CLValue into the existing `VaultState` interface.
-      ref: `src/chain/chain.service.ts:38`
-      done: `GET /portfolios/:vault` returns live `holdings` + `currentTargetAllocation`
-- [ ] Use the **on-chain** `createdYear` / `currentTargetAllocation` from `view_state`;
+- [x] Instantiate `casper-js-sdk` `RpcClient(new HttpHandler(CASPER_NODE_URL))` once, here only.
+      ref: `src/chain/chain.service.ts` (lazy `client()` singleton); config in `src/chain/casper.config.ts`  🔴 golden rule #2 (chain access lives ONLY in this module)
+- [x] Implement `viewState(vaultHash)`: read the vault's stored fields + holdings and
+      assemble the `VaultState` interface.
+      ref: `src/chain/chain.service.ts` (`viewState`); decoders in `src/chain/odra.codec.ts`
+      done: decode unit-tested (`odra.codec.spec.ts`); FULL live e2e pending a deployed vault (none on testnet yet — `mUSDC.total_supply == 0`).
+      NOTE: Casper 2.0 has NO off-chain view-call, so `view_state()` cannot be invoked for its
+      return value. Instead each stored `Var`/`Mapping` is read from the Odra "state" dictionary
+      + CEP-18 `balances` dict; the identical read path is verified live via `getPrices`.
+- [~] Use the **on-chain** `createdYear` / `currentTargetAllocation` from `view_state`;
       do not recompute the glide target locally.
       ref: `src/portfolio/portfolio.service.ts:85` (DB mirror set independently) — in `get()`/`list()` surface `created_year` from `view_state`, treat the DB value as a mirror only
       🔴 golden rule #5 (don't re-implement the glide target)
-- [ ] Implement `getPrices()`: read all 5 oracle prices into `Record<AssetSymbol, bigint>` (raw 6 dp).
-      ref: `src/chain/chain.service.ts:43`
-      done: keeper `decideRebalance` runs on live prices; `valueUsd6` is non-zero for a funded vault
+      ⚠️ FORCED DEVIATION: `createdYear` IS read on-chain, but `currentTargetAllocation` CANNOT be
+      (no off-chain view-call on Casper). It is recomputed in `src/chain/glide.ts`, a faithful,
+      test-pinned mirror of `constants.rs` (`glide.spec.ts` uses the EXACT Rust vectors), so the
+      rule's INTENT — one definition, no drift — is preserved. Still TODO: `portfolio.service`
+      `get()/list()` surfacing `createdYear` from `viewState` (today still the DB mirror).
+- [x] Implement `getPrices()`: read all 5 oracle prices into `Record<AssetSymbol, bigint>` (raw 6 dp).
+      ref: `src/chain/chain.service.ts` (`getPrices`)
+      done: ✅ VERIFIED LIVE on casper-test — mUSDC $1 · mBTC $65k · mNVDAx $100 · mXAUT $2k · mGOOGLx $150.
 
 ### P0 · ChainService: agent writes (`executeBuy` + `rebalance`)
 - [ ] Load the agent hot key from `AGENT_SECRET_KEY_PATH` at startup; sign deploys with it.
@@ -90,12 +98,13 @@ Demo controls must keep working (demo-readiness rule).
       ref: `src/keeper/keeper.service.ts:47,131`; `prisma/schema.prisma` (`PriceLog`, `PriceSource`)
       done: `POST /keeper/oracle/override` writes a `manual_override` row; the cron writes `keeper` rows
 
-### P0 · Fix the contract-hash env drift (factory → registry)
+### P0 · Fix the contract-hash env drift (factory → registry) — ✅ DONE
 The contract deploys a `VaultRegistry`, but the backend env still names a factory.
-- [ ] Rename `VAULT_FACTORY_HASH` → `VAULT_REGISTRY_HASH` and load the value from
+- [x] Rename `VAULT_FACTORY_HASH` → `VAULT_REGISTRY_HASH` and load the value from
       `../../contract/deployed.casper-test.json`.
-      ref: `README.md:60` (and wherever `chain` reads the hash once implemented)
-      done: backend targets `hash-70bcab…f112e` (the deployed registry); no `FACTORY` symbol remains
+      ref: `README.md` (env section) + `src/chain/casper.config.ts` (reads `VAULT_REGISTRY_HASH`); values in `.env` / new `.env.example`
+      done: ✅ backend targets `hash-70bcab…f112e` (the deployed registry); no `FACTORY` symbol remains in code/env/README.
+      (Frontend `lib/constants.ts` factory→registry drift is a SEPARATE task in `../../frontend/docs/TASK.md`.)
 
 ---
 
