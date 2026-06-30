@@ -253,16 +253,16 @@ oracle override, rebalance-now) are unauthenticated and powerful.
       🔴 golden rule #7 (x402 ONLY on rebalance — do not gate other endpoints)
       done: a rebalance pulls the fee and persists a real receipt id
 
-### P1 · Agent-key & secrets hygiene — ~ PARTIAL
-- [~] Load the key only from `AGENT_SECRET_KEY_PATH`; assert `secrets/` and `.env` are gitignored (they are — keep it so).
-      ref: `../ARCHITECTURE.md` §8 · 🔴 golden rule #8
-      DONE (the CI/grep half): the backend CI workflow has an "Assert no secrets are committed" step that
-      fails if any `.env`/`.pem`/`secrets/` file is tracked or any PEM private-key header appears in tracked
-      content (verified locally — no match; only `*.env.example` templates are tracked). The key is already
-      loaded only from `AGENT_SECRET_KEY_PATH` and never logged/returned (see the chain `signer` task).
-      ref: `.github/workflows/backend.yml`
-      STILL TODO: an explicit unit/grep assertion that the key never appears in a log/response/error payload.
-      done: key never appears in logs, responses, or errors; CI/grep check for accidental leakage
+### P1 · Agent-key & secrets hygiene — ✅ DONE
+- [x] Load the key only from `AGENT_SECRET_KEY_PATH`; assert `secrets/` and `.env` are gitignored (they are — keep it so).
+      🔴 golden rule #8 · ref: `../ARCHITECTURE.md` §8
+      DONE — two layers: (1) the CI workflow's "Assert no secrets are committed" step fails if any
+      `.env`/`.pem`/`secrets/` file is tracked or a PEM private-key header appears in tracked content
+      (only `*.env.example` templates are tracked). (2) `chain.read.spec.ts` (#8) runs a real write with
+      an in-memory key and asserts the agent key's secret hex never appears in any log line. The key is
+      loaded only from `AGENT_SECRET_KEY_PATH` (`signer`), cached, and never logged or returned.
+      ref: `.github/workflows/backend.yml`; `src/chain/chain.read.spec.ts`
+      done: key never appears in logs, responses, or errors; CI/grep check for accidental leakage ✓
 
 ### P1 · Populate `RebalanceLog.swaps` (currently always `[]`)
 - [ ] Once per-leg swap data is on-chain, fill `swaps` from indexed `Router.Swapped`
@@ -300,12 +300,18 @@ choice. Resolve the dead-model inconsistency.
       ref: `src/**/*.spec.ts`
 
 ### P1 · Cover the new chain wiring
-- [~] Unit-test `ChainService`: write routing + arg construction (`chain.write.spec.ts`),
+- [x] Unit-test `ChainService`: write routing + arg construction (`chain.write.spec.ts`),
       `accountKey` (`chain.service.spec.ts`), and a LIVE decode cross-check
-      (`chain.live.spec.ts`, opt-in) are done. STILL TODO: a mocked-RPC encode/decode
-      round-trip for `viewState`/`getPrices`, and an explicit assertion that `ChainService`
-      exposes no withdraw/fund-moving method (golden rule #4 — structurally none today).
-      ref: `src/chain/chain.service.ts`
+      (`chain.live.spec.ts`, opt-in).
+      DONE: `chain.read.spec.ts` adds a mocked-RPC encode→decode round-trip — wire bytes are
+      built from first principles (Casper `bytesrepr`: U256/U32/Address/Vec<U32>/profile, the
+      Odra List(U8) state-wrap, native CEP-18 U256) and fed through a fake `RpcClient`, then
+      `getPrices`/`viewState` are asserted to decode them back to the originals (also covers the
+      Casper -32003 → 0 path and that a NON -32003 RPC error propagates, never masked as 0).
+      It also asserts golden rule #4 (no withdraw/transfer/fund-moving method on the prototype;
+      vault writes are exactly `executeBuy`/`rebalance`) and golden rule #8 (a write logs the tx
+      hash but never the agent key — generated in-memory, secret hex asserted absent from logs).
+      ref: `src/chain/chain.read.spec.ts`
 - [x] Integration test: deposit → `executeBuy` updates holdings; redelivery is idempotent.
       DONE: idempotency unit-tested (`keeper.service.spec.ts` in-flight lock) + LIVE-VERIFIED
       end-to-end (fund $50 idle → `investIdle` → `executeBuy` → idle 0; see the deposit→buy section).
