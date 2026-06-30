@@ -71,6 +71,8 @@ const TRIGGER_GAS_MOTES = Number(
 const WRITE_GAS_MOTES = Number(
   process.env.AGENT_WRITE_GAS_MOTES ?? 10_000_000_000, // 10 CSPR (set_price / register / faucet)
 );
+/** How long to wait for a submitted tx to finalize before proceeding (ms). */
+const TX_WAIT_MS = Number(process.env.AGENT_TX_WAIT_MS ?? 180_000); // 3 min
 
 /** Minimal shapes of the RPC `rawJSON` we read (keeps the reads off `any`). */
 interface RawContractPackage {
@@ -323,9 +325,11 @@ export class ChainService {
   }
 
   /**
-   * Build → sign → submit a TransactionV1 contract call by package hash; returns
-   * the transaction hash. Errors propagate (golden rule: don't swallow chain
-   * errors); a failed swap leg inside the call still surfaces as a tx failure.
+   * Build → sign → submit a TransactionV1 contract call by package hash, then wait
+   * for finalization and surface any on-chain revert (golden rule: don't swallow
+   * chain errors — a failed swap leg or guard becomes a thrown error). Returns the
+   * transaction hash. A confirmation timeout is logged, not thrown (the tx is
+   * already submitted; the caller reconciles via reads).
    */
   private async call(
     packageHash: string,
@@ -344,9 +348,26 @@ export class ChainService {
       .payment(paymentMotes)
       .build();
     tx.sign(key);
-    await this.client().putTransaction(tx);
     const hash = tx.hash.toHex();
-    this.logger.log(`${entryPoint} → tx ${hash}`);
+    await this.client().putTransaction(tx);
+    this.logger.log(`${entryPoint} → tx ${hash} (awaiting finalization)`);
+
+    const info = await this.client()
+      .waitForTransaction(tx, TX_WAIT_MS)
+      .catch((err: Error) => {
+        this.logger.warn(
+          `${entryPoint} tx ${hash}: not confirmed within ${TX_WAIT_MS}ms (${err.message})`,
+        );
+        return null;
+      });
+    if (!info) return hash;
+    const revert = info.executionInfo?.executionResult?.errorMessage;
+    if (revert) {
+      throw new Error(
+        `${entryPoint} reverted on-chain (tx ${hash}): ${revert}`,
+      );
+    }
+    this.logger.log(`${entryPoint} ✓ executed (tx ${hash})`);
     return hash;
   }
 

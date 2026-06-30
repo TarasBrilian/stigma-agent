@@ -70,14 +70,18 @@ snapshot) depends on these two reads. Implement them first.
       built/signed/submitted via casper-js-sdk v5). Routing + arg construction unit-tested
       (`chain.write.spec.ts`); errors propagate (don't swallow). `chain.module` unchanged.
       ref: `src/chain/chain.service.ts` (`executeBuy`/`rebalance`/`call`)
-- [ ] **(a) Live-validate the writes on testnet.** Point `AGENT_SECRET_KEY_PATH` at a FUNDED key
-      (for the smoke vault, agent == deployer == `../../contract/casper_account.pem`), then trigger
-      `executeBuy` against vault `hash-5e83185e…` (idle mUSDC == 0 → near-no-op, minimal gas) to
-      confirm the TransactionV1 + secp256k1 signature + arg encoding are accepted and execute on
-      chain; then a real `rebalance` end to end. This is the writes' analogue of the read cross-check
-      — implementation + routing are tested, but on-chain acceptance is unproven. Needs gas (not CI).
+- [x] **(a) Live-validate the writes on testnet — ✅ VERIFIED.** Ran all four writes against the
+      smoke vault `hash-5e83185e…` with the funded key (`AGENT_SECRET_KEY_PATH=../contract/casper_account.pem`,
+      agent == deployer), each a deliberate near-no-op; all accepted + executed on-chain — proving
+      TransactionV1 by package hash + secp256k1 signature + arg encoding (Key + U256) are all correct:
+      register `d9ab3557…` · execute_buy `fe6591d2…` · set_price `8474231115…` · rebalance `0d933a10…`.
+      `call()` now WAITS for finalization and THROWS on an on-chain revert, so a failed swap leg / guard
+      surfaces (no silent success). Tool: `scripts/validate-writes.ts` (spends gas). NOTE: `rebalance`
+      moved integer dust, so `chain.live.spec.ts` asserts the value-based target invariant (mUSDC 0 +
+      each asset at its target share ±$20), not exact balances.
       🔴 golden rule #8 (never log/return the key) · #4 (no withdraw/fund-moving call with it)
-      done: `POST /keeper/rebalance/:vault` executes on testnet and a `RebalanceLog` row is written
+      STILL TODO (separate, needs Postgres): the FULL keeper path — `POST /keeper/rebalance/:vault`
+      → billing fee → `chain.rebalance` → agent rationale → `RebalanceLog` row.
 
 ### P0 · Vault creation & registration path (align with frontend + contract)
 A vault must exist before any deposit/buy. Decide and implement the creation path

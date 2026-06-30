@@ -14,6 +14,7 @@
  * `../../../contract/deployed.casper-test.json` `test_vault`.
  */
 import 'dotenv/config';
+import { type AssetSymbol } from '../config/constants';
 import { ChainService } from './chain.service';
 import { currentYear } from './glide';
 
@@ -59,15 +60,26 @@ live('ChainService — live testnet reads', () => {
     expect(s.targetYear).toBe(2040);
     expect(s.createdYear).toBe(2026);
 
-    // Holdings (CEP-18 balances dict) after the smoke execute_buy — the exact
-    // Moderate target by value: mBTC $2k · mNVDAx $3k · mXAUT $4k · mGOOGLx $1k.
-    expect(s.holdings).toEqual({
-      mUSDC: '0',
-      mBTC: '30769',
-      mNVDAx: '30000000',
-      mXAUT: '2000000',
-      mGOOGLx: '6666666',
-    });
+    // Holdings (CEP-18 balances dict). The vault is invested at the Moderate
+    // target; assert the ECONOMIC invariant (robust to integer dust from
+    // rebalances) rather than exact balances: idle mUSDC is 0 and each asset
+    // sits at its target share of ~$10k (within ~$20).
+    const prices = await chain.getPrices();
+    const valueUsd6 = (sym: AssetSymbol): bigint =>
+      (BigInt(s.holdings[sym]) * prices[sym]) / 1_000_000n;
+    const within = (
+      actual: bigint,
+      target: bigint,
+      tol = 20_000_000n,
+    ): void => {
+      expect(actual).toBeGreaterThanOrEqual(target - tol);
+      expect(actual).toBeLessThanOrEqual(target + tol);
+    };
+    expect(s.holdings.mUSDC).toBe('0');
+    within(valueUsd6('mBTC'), 2_000_000_000n); //    20% of ~$10k = $2,000
+    within(valueUsd6('mNVDAx'), 3_000_000_000n); //  30% = $3,000
+    within(valueUsd6('mXAUT'), 4_000_000_000n); //   40% = $4,000
+    within(valueUsd6('mGOOGLx'), 1_000_000_000n); // 10% = $1,000
 
     // Glide target is recomputed off-chain (glide.ts, pinned by glide.spec.ts):
     // Σ must be 10000, and while currentYear == createdYear it equals base.
