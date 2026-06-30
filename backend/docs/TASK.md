@@ -204,18 +204,19 @@ The contract deploys a `VaultRegistry`, but the backend env still names a factor
       done: `feedOracle` cron pushes real prices (logged `source = keeper`); no longer hits the catch/skip
       note: keep `feedOracle`'s try/catch — a price-source outage must not crash the loop
 
-### P1 · Chat: snapshot from live state (not just the DB mirror)
-`chat.service.ask` persists the Q&A and answers from a snapshot, but the snapshot
-is built from the DB MIRROR only (`chat.service.ts:30`) — name/profile/goal, no
-live value. The file flags this as a TODO now that `chain.viewState` exists. (The
-no-OpenRouter `agent.answer` fallback is covered by the rebalance agent-resilience
-task above.)
-- [ ] Build the chat snapshot from live `chain.viewState` + `getPrices` (holdings,
-      current value, current vs target allocation, progress) merged with the mirror, so
-      answers reflect real state — not only the static config.
-      ref: `src/portfolio/chat.service.ts:30` (snapshot); `src/chain/chain.service.ts` (`viewState`)
+### P1 · Chat: snapshot from live state (not just the DB mirror) — ✅ DONE
+- [x] Build the chat snapshot from live `chain.viewState` + `getPrices` merged with the mirror.
+      DONE: `ChatService` injects `ChainService`; `buildSnapshot` enriches the mirror
+      (name/profile/goal) with LIVE state — `currentValueUsd`, `currentAllocationPct`,
+      `targetAllocationPct` — in HUMAN-READABLE units ($ and %, not raw 6dp/bps) so the LLM
+      answers correctly instead of fumbling raw integers (display-only conversions; executed
+      amounts stay bigint). RESILIENT: if the live read fails, it degrades to the mirror-only
+      snapshot (logged) so chat still answers. (The no-OpenRouter `agent.answer` fallback is the
+      rebalance agent-resilience task above.) Covered by `chat.service.spec.ts` (enrich, live-read
+      fallback, not-found).
+      ref: `src/portfolio/chat.service.ts` (`buildSnapshot`); `src/chain/chain.service.ts` (`viewState`)
       🔴 golden rule #3 (read live state via `chain`; the LLM stays in `agent`)
-      done: an answer can reference the portfolio's current value/holdings, not only name/profile/goal
+      done: an answer can reference the portfolio's current value/holdings, not only name/profile/goal ✓
 
 ### P1 · API authentication & authorization (none today)
 Every endpoint is open; `register` trusts any `owner`, and demo endpoints (faucet,
