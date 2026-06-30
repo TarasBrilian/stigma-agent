@@ -1,13 +1,17 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { KeeperService } from './keeper.service';
 import { OracleOverrideDto } from './dto/oracle-override.dto';
 import { FaucetDto } from './dto/faucet.dto';
 
 /**
- * Demo controls (testnet). Keep these working (golden rule: demo-readiness).
- * They let the rebalance + agent rationale be shown live on stage.
+ * Demo controls (testnet). Keep these working (golden rule: demo-readiness) but
+ * rate-limited (ThrottlerGuard) — they are powerful (oracle override moves every
+ * vault's accounting; faucet mints) and otherwise unauthenticated, so the budget
+ * (DEMO_RATE_TTL_MS / DEMO_RATE_LIMIT) caps abuse without blocking the live demo.
  */
 @Controller()
+@UseGuards(ThrottlerGuard)
 export class KeeperController {
   constructor(private readonly keeper: KeeperService) {}
 

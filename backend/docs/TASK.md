@@ -236,15 +236,33 @@ The contract deploys a `VaultRegistry`, but the backend env still names a factor
       🔴 golden rule #3 (read live state via `chain`; the LLM stays in `agent`)
       done: an answer can reference the portfolio's current value/holdings, not only name/profile/goal ✓
 
-### P1 · API authentication & authorization (none today)
-Every endpoint is open; `register` trusts any `owner`, and demo endpoints (faucet,
-oracle override, rebalance-now) are unauthenticated and powerful.
-- [ ] Add wallet-signature auth (verify the caller controls `owner`) for onboarding/register/chat.
-      ref: `src/main.ts:9` (CORS only today); `src/portfolio/portfolio.controller.ts`
-- [ ] Gate or rate-limit the demo endpoints so the oracle override can't be abused
+### P1 · API authentication & authorization — ✅ DONE
+- [x] Add wallet-signature auth (verify the caller controls `owner`) for onboarding/register/chat.
+      DONE: shared authentication (`src/auth/wallet-auth.guard.ts`) checks `x-casper-timestamp` is
+      fresh (replay window `AUTH_MAX_SKEW_SEC`, default 300s) + verifies a Casper signature over
+      `stigma-auth:<ts>` with the caller's public key (casper-js-sdk `verifySignature` — verified for
+      ed25519 + secp256k1; throws → treated as invalid). Authorization is split into TWO guards so the
+      owner source can't be spoofed: `WalletAuthGuard` (register `POST /portfolios`, onboarding
+      `POST /onboarding/answers`) requires the signer to BE `body.owner`; `VaultOwnerGuard` (chat
+      `POST /agent/chat`) authorizes against the vault's STORED owner (mirror lookup) and deliberately
+      IGNORES any `body.owner` — closing a bypass where a caller could read another user's vault by
+      adding their own `owner` to the chat body (the guard reads the raw body, pre-whitelist).
+      FEATURE-FLAGGED: a no-op unless `AUTH_REQUIRED=true`, so the live demo keeps working until the
+      frontend signs (flip on in prod). Never touches the agent key / moves funds (#4/#8).
+      Covered by `wallet-auth.guard.spec.ts` (no-op, valid, missing-headers, stale-ts, bad-sig,
+      owner-mismatch; vault hit/miss + the body.owner-ignored bypass test, mutation-verified) +
+      `app.boot.spec.ts` (both guards resolve at runtime).
+      ref: `src/auth/wallet-auth.guard.ts`; controllers in `portfolio`/`onboarding`
+- [x] Gate or rate-limit the demo endpoints so the oracle override can't be abused
       to move every vault's accounting.
-      ref: `src/keeper/keeper.controller.ts`
-      done: a caller cannot register/mutate a portfolio for an `owner` they don't control
+      DONE: chose RATE-LIMIT (keeps the demo open, no token to distribute). `@nestjs/throttler`
+      `ThrottlerModule.forRoot` (budget `DEMO_RATE_TTL_MS`/`DEMO_RATE_LIMIT`, default 30/60s) + a
+      `ThrottlerGuard` on `KeeperController` (the 4 demo endpoints: oracle override, rebalance-now,
+      invest, faucet). `app.boot.spec.ts` boots the real app and asserts a 429 once the budget is spent.
+      ref: `src/keeper/keeper.controller.ts`; `src/app.module.ts`
+      done: a caller cannot register/mutate a portfolio for an `owner` they don't control ✓ (when AUTH_REQUIRED=true)
+      NOTE: frontend must sign requests (send `x-casper-public-key`/`-signature`/`-timestamp`) before
+      enabling `AUTH_REQUIRED` — tracked in `../../frontend/docs/TASK.md`.
 
 ### P1 · x402 — real rebalance micro-fee
 - [ ] Integrate the x402 facilitator (`X402_FACILITATOR_URL`); settle the fee in `mUSDC`;

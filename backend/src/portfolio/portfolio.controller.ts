@@ -1,5 +1,14 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { PortfolioService } from './portfolio.service';
+import { WalletAuthGuard } from '../auth/wallet-auth.guard';
 import { RegisterPortfolioDto } from './dto/register-portfolio.dto';
 import { StarterDto } from './dto/starter.dto';
 import { SuggestDto } from './dto/suggest.dto';
@@ -24,6 +33,7 @@ export class PortfolioController {
 
   /** Record the off-chain mirror after a user-signed `create_vault`. */
   @Post()
+  @UseGuards(WalletAuthGuard)
   register(@Body() dto: RegisterPortfolioDto): Promise<PortfolioMetaDto> {
     return this.portfolio.register(dto);
   }

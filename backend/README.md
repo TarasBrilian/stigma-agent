@@ -74,6 +74,12 @@ X402_FACILITATOR_URL=...
 # keeper cadence
 KEEPER_INTERVAL_MS=300000             # price feed
 REBALANCE_INTERVAL_MS=3600000         # rebalance check
+
+# auth & rate limiting
+AUTH_REQUIRED=false                   # wallet-signature auth on register/onboarding/chat (off by default)
+# AUTH_MAX_SKEW_SEC=300               # replay window for the signed timestamp
+# DEMO_RATE_TTL_MS=60000              # demo-endpoint rate-limit window (ms)
+# DEMO_RATE_LIMIT=30                  # demo-endpoint max requests / window / IP
 ```
 
 > Keep `secrets/` out of version control. Never log the agent key.
