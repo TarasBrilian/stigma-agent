@@ -26,6 +26,14 @@ export class KeeperController {
     return this.keeper.triggerRebalance(vault, { force: true });
   }
 
+  /** Invest idle mUSDC now (deposit→buy) without waiting for the loop. */
+  @Post('keeper/invest/:vault')
+  investNow(
+    @Param('vault') vault: string,
+  ): Promise<{ invested: boolean; reason: string }> {
+    return this.keeper.investIdle(vault);
+  }
+
   /** Mint test mUSDC. */
   @Post('faucet/musdc')
   async faucet(@Body() dto: FaucetDto): Promise<{ ok: true }> {

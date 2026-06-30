@@ -81,3 +81,45 @@ describe('KeeperService.decideRebalance', () => {
     expect(d.reason).toContain('cooldown');
   });
 });
+
+describe('KeeperService.investIdle (deposit→buy)', () => {
+  const chainMock = { idleMusdc: jest.fn(), executeBuy: jest.fn() };
+  const makeWithChain = (): KeeperService =>
+    new KeeperService(
+      undefined as unknown as PrismaService,
+      chainMock as unknown as ChainService,
+      undefined as unknown as PricingService,
+      undefined as unknown as BillingService,
+      undefined as unknown as AgentService,
+    );
+
+  beforeEach(() => {
+    chainMock.idleMusdc.mockReset();
+    chainMock.executeBuy.mockReset().mockResolvedValue('tx');
+  });
+
+  it('invests when idle clears the min-trade threshold', async () => {
+    chainMock.idleMusdc.mockResolvedValue(5_000_000n); // $5
+    const r = await makeWithChain().investIdle('v');
+    expect(chainMock.executeBuy).toHaveBeenCalledWith('v');
+    expect(r.invested).toBe(true);
+  });
+
+  it('skips dust below the min-trade threshold (no executeBuy)', async () => {
+    chainMock.idleMusdc.mockResolvedValue(500_000n); // $0.50 < $1
+    const r = await makeWithChain().investIdle('v');
+    expect(chainMock.executeBuy).not.toHaveBeenCalled();
+    expect(r.invested).toBe(false);
+    expect(r.reason).toContain('below min trade');
+  });
+
+  it('is idempotent under the in-flight lock (no double-buy)', async () => {
+    chainMock.idleMusdc.mockResolvedValue(5_000_000n);
+    const keeper = makeWithChain();
+    const first = keeper.investIdle('v'); // acquires the lock synchronously
+    const second = await keeper.investIdle('v'); // lock held → skip
+    expect(second).toEqual({ invested: false, reason: 'already in flight' });
+    await first;
+    expect(chainMock.executeBuy).toHaveBeenCalledTimes(1);
+  });
+});

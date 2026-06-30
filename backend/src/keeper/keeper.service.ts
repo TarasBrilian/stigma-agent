@@ -57,6 +57,57 @@ export class KeeperService {
     }
   }
 
+  /* -------------------------- deposit → buy loop -------------------------- */
+
+  /**
+   * Invest any idle mUSDC sitting in vaults — the deposit→buy mechanism. Polling
+   * the vault's idle balance (rather than subscribing to the `Deposited` event)
+   * is simpler, needs no CSPR.cloud, and ALSO picks up the cash a partial
+   * `withdraw` leaves behind; CSPR.cloud event streaming is the production
+   * upgrade. `executeBuy` zeroes idle, so the loop self-heals.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async scanAndInvest(): Promise<void> {
+    const vaults = await this.prisma.portfolioMeta.findMany({
+      select: { vaultHash: true },
+    });
+    for (const { vaultHash } of vaults) {
+      try {
+        await this.investIdle(vaultHash);
+      } catch (err) {
+        this.logger.warn(
+          `invest ${vaultHash} skipped: ${(err as Error).message}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Invest a vault's idle mUSDC via `executeBuy` if it clears the dust threshold,
+   * behind the idempotency lock. Naturally idempotent: `executeBuy` invests ALL
+   * idle, so an overlapping scan / redelivery sees idle == 0 and no-ops (no
+   * double-buy). Shares the `inFlight` lock with rebalance, so the two never run
+   * on the same vault at once.
+   */
+  async investIdle(
+    vaultHash: string,
+  ): Promise<{ invested: boolean; reason: string }> {
+    if (this.inFlight.has(vaultHash)) {
+      return { invested: false, reason: 'already in flight' };
+    }
+    this.inFlight.add(vaultHash);
+    try {
+      const idle = await this.chain.idleMusdc(vaultHash);
+      if (idle < KEEPER.minTradeUsd6) {
+        return { invested: false, reason: `idle ${idle} below min trade` };
+      }
+      await this.chain.executeBuy(vaultHash);
+      return { invested: true, reason: `invested ${idle} idle mUSDC` };
+    } finally {
+      this.inFlight.delete(vaultHash);
+    }
+  }
+
   /* ---------------------------- rebalance loop ---------------------------- */
 
   @Cron(CronExpression.EVERY_HOUR)

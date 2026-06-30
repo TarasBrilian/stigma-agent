@@ -98,6 +98,13 @@ fn main() {
         return;
     }
 
+    // ---- fund an existing vault: VAULT_FUND=<hash> → faucet→approve→deposit, NO
+    //      execute_buy, so it leaves idle mUSDC for the backend's deposit→buy loop ----
+    if let Some(vh) = opt("VAULT_FUND") {
+        fund(&env, addr_from("VAULT_FUND", &vh), &assets, owner, deployer);
+        return;
+    }
+
     let agent = opt_addr("VAULT_AGENT").unwrap_or(deployer);
     let profile = parse_profile(&opt("VAULT_PROFILE").unwrap_or_else(|| "Moderate".into()));
     let base_allocation =
@@ -200,6 +207,49 @@ fn verify(
         .list_vaults(&owner)
         .contains(&vault_addr);
     println!("registry lists this vault under owner: {listed}");
+}
+
+/// Fund an existing vault: faucet → approve → deposit, but NO `execute_buy`, so it
+/// leaves idle mUSDC for the backend's deposit→buy loop (`keeper.investIdle`) to
+/// pick up. Driven by the single deployer key, so owner must be the deployer.
+fn fund(
+    env: &odra::host::HostEnv,
+    vault_addr: Address,
+    assets: &[Address],
+    owner: Address,
+    deployer: Address,
+) {
+    println!("\n== fund (VAULT_FUND) ==");
+    if owner != deployer {
+        println!("skipped: fund needs owner == deployer (only the deployer key is loaded)");
+        return;
+    }
+    let deposit = usd6(parse_u64("FUND_USD", 50));
+    let call_gas = parse_u64("CALL_GAS", 20 * CSPR);
+    let mut musdc = MockToken::load(env, assets[MUSDC_INDEX]);
+    let mut vault = Vault::load(env, vault_addr);
+
+    env.set_caller(deployer);
+    env.set_gas(call_gas);
+    if let Err(e) = musdc.try_faucet_mint(deposit) {
+        eprintln!("faucet_mint FAILED: {e:?}");
+        exit(1);
+    }
+    env.set_gas(call_gas);
+    if let Err(e) = musdc.try_approve(&vault_addr, &deposit) {
+        eprintln!("approve FAILED: {e:?}");
+        exit(1);
+    }
+    env.set_gas(call_gas);
+    if let Err(e) = vault.try_deposit(deposit) {
+        eprintln!("deposit FAILED: {e:?}");
+        exit(1);
+    }
+    println!(
+        "deposited ${} idle mUSDC into {} (NO execute_buy) — ready for backend investIdle",
+        parse_u64("FUND_USD", 50),
+        vault_addr.to_string()
+    );
 }
 
 /// faucet → approve → deposit → execute_buy, all driven by the single deployer

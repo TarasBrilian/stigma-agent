@@ -107,15 +107,30 @@ consistently across layers; today only the off-chain metadata mirror exists.
       done: a created vault is registered on-chain + mirrored in Postgres; `GET /portfolios?owner=` lists it ✓
       🔴 golden rule #4 (deploying/registering a vault is fine; never put the agent key on a withdraw/fund-moving path)
 
-### P0 · Deposit → buy event flow (currently MISSING — no listener exists)
-The architecture's deposit→buy is event-driven, but there is **no event
-subscription anywhere** in `src/`. Without it, deposits never get invested.
-- [ ] Expose the vault `Deposited` event stream from the **`chain`** module (CSPR.cloud
-      Streaming; `CSPR_CLOUD_API_KEY`), or poll as a fallback.
-      ref: `../ARCHITECTURE.md` §6 (Deposit → buy); `src/chain/chain.service.ts`  🔴 golden rule #2 (Casper/CSPR.cloud access stays in `chain`)
-- [ ] Handle the stream in the keeper: on `Deposited`, call `chain.executeBuy(vault)` keyed by deploy/event id for idempotency.
-      🔴 golden rule #6 (idempotency lock — reuse the `inFlight` pattern, key by event id)
-      done: after a user deposit, holdings show bought assets with no manual trigger; redelivery does not double-buy
+### P0 · Deposit → buy flow — ✅ DONE (polling)
+- [x] Surface uninvested deposits from the **`chain`** module so the keeper can act.
+      Chose POLLING over CSPR.cloud event streaming: `chain.idleMusdc(vault)` reads the
+      vault's mUSDC balance (one dict read, same proven read path as `getPrices`). It needs
+      no CSPR.cloud AND also catches the cash a partial `withdraw` leaves behind (a
+      `Deposited` event subscription would miss that). CSPR.cloud Streaming
+      (`CSPR_CLOUD_API_KEY`) remains the production upgrade for real-time / lower-poll.
+      ref: `src/chain/chain.service.ts` (`idleMusdc`)  🔴 golden rule #2 (chain access stays here)
+- [x] Handle it in the keeper: `scanAndInvest` cron (every 5 min) → `investIdle(vault)` calls
+      `chain.executeBuy` when idle clears the min-trade threshold, behind the `inFlight` lock.
+      Idempotent by construction: `executeBuy` invests ALL idle, so an overlapping scan /
+      redelivery sees idle == 0 and no-ops (no double-buy); the lock is shared with rebalance
+      so the two never run on one vault at once. Manual `POST /keeper/invest/:vault` for demos.
+      Covered by `keeper.service.spec.ts` (threshold, dust-skip, in-flight idempotency).
+      ref: `src/keeper/keeper.service.ts` (`scanAndInvest`/`investIdle`); `keeper.controller.ts`
+      🔴 golden rule #6 (idempotency lock)
+      done: after a deposit the scan/endpoint invests idle with no manual `executeBuy`; redelivery
+      does not double-buy ✓.
+      ✅ LIVE-VERIFIED end-to-end on casper-test: funded the vault with $50 idle mUSDC
+      (`VAULT_FUND` mode of the contract runner: faucet→approve→deposit, no buy), then
+      `keeper.investIdle` read idle = 50_000_000, cleared the threshold, and called `executeBuy`
+      (tx `d6dc9293…`) — idle returned to 0 and holdings grew by exactly the Moderate target
+      (mBTC +$10 · mNVDAx +$15 · mXAUT +$20 · mGOOGLx +$5). Tools: `bin/deploy_vault.rs` `VAULT_FUND`,
+      `backend/scripts/validate-invest.ts`.
 
 ### P0 · ChainService: demo writes (`setPrice` + `faucetMint`) + PriceLog
 Demo controls must keep working (demo-readiness rule).

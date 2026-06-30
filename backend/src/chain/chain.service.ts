@@ -221,6 +221,17 @@ export class ChainService {
     };
   }
 
+  /** The vault's idle (uninvested) mUSDC balance — raw 6 dp. Drives deposit→buy:
+   *  a positive value means a deposit (or withdraw remainder) is waiting to be
+   *  invested. One dictionary read — cheap enough to poll. */
+  async idleMusdc(vaultHash: string): Promise<bigint> {
+    if (!vaultHash) throw new Error('idleMusdc: vaultHash is required');
+    const musdc = requireValue(this.cfg.tokenHashes.mUSDC, 'TOKEN_MUSDC_HASH');
+    const holderKey = cep18ItemKey(contractKeyBytes(vaultHash));
+    const bytes = await this.readNativeDictItem(musdc, 'balances', holderKey);
+    return bytes ? decodeU256(bytes) : 0n;
+  }
+
   /** Raw CEP-18 balance of the vault for each asset (canonical order). */
   private async readHoldings(
     vaultHash: string,

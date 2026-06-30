@@ -14,7 +14,7 @@
  * `../../../contract/deployed.casper-test.json` `test_vault`.
  */
 import 'dotenv/config';
-import { type AssetSymbol } from '../config/constants';
+import { weightsBps } from '../config/money';
 import { ChainService } from './chain.service';
 import { currentYear } from './glide';
 
@@ -60,26 +60,19 @@ live('ChainService — live testnet reads', () => {
     expect(s.targetYear).toBe(2040);
     expect(s.createdYear).toBe(2026);
 
-    // Holdings (CEP-18 balances dict). The vault is invested at the Moderate
-    // target; assert the ECONOMIC invariant (robust to integer dust from
-    // rebalances) rather than exact balances: idle mUSDC is 0 and each asset
-    // sits at its target share of ~$10k (within ~$20).
+    // Holdings (CEP-18 balances dict). The vault stays at the Moderate target, so
+    // assert the WEIGHTS (robust to the total value changing as deposits invest /
+    // to integer dust) — idle mUSDC fully invested, each asset at its target share.
     const prices = await chain.getPrices();
-    const valueUsd6 = (sym: AssetSymbol): bigint =>
-      (BigInt(s.holdings[sym]) * prices[sym]) / 1_000_000n;
-    const within = (
-      actual: bigint,
-      target: bigint,
-      tol = 20_000_000n,
-    ): void => {
-      expect(actual).toBeGreaterThanOrEqual(target - tol);
-      expect(actual).toBeLessThanOrEqual(target + tol);
+    const weights = weightsBps(s.holdings, prices);
+    const nearBps = (actual: number, target: number, tol = 50): void => {
+      expect(Math.abs(actual - target)).toBeLessThanOrEqual(tol);
     };
     expect(s.holdings.mUSDC).toBe('0');
-    within(valueUsd6('mBTC'), 2_000_000_000n); //    20% of ~$10k = $2,000
-    within(valueUsd6('mNVDAx'), 3_000_000_000n); //  30% = $3,000
-    within(valueUsd6('mXAUT'), 4_000_000_000n); //   40% = $4,000
-    within(valueUsd6('mGOOGLx'), 1_000_000_000n); // 10% = $1,000
+    nearBps(weights.mBTC ?? 0, 2000); //    20%
+    nearBps(weights.mNVDAx ?? 0, 3000); //  30%
+    nearBps(weights.mXAUT ?? 0, 4000); //   40%
+    nearBps(weights.mGOOGLx ?? 0, 1000); // 10%
 
     // Glide target is recomputed off-chain (glide.ts, pinned by glide.spec.ts):
     // Σ must be 10000, and while currentYear == createdYear it equals base.
