@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Profile } from '../config/constants';
 import {
+  deterministicRationale,
   heuristicProfile,
   parseAllocationReply,
   parseProfileReply,
@@ -8,6 +9,11 @@ import {
   type ProfileReply,
   type RiskAnswer,
 } from './agent.parse';
+
+/** Graceful, display-only reply when the Q&A LLM is unavailable. */
+const ANSWER_UNAVAILABLE =
+  'The assistant is unavailable right now, so I can’t answer that — your ' +
+  'portfolio’s value, allocation, and goal are shown on the dashboard.';
 
 interface ChatMsg {
   role: 'system' | 'user' | 'assistant';
@@ -108,36 +114,69 @@ export class AgentService {
     return parsed;
   }
 
-  /** Write a natural-language rationale for a rebalance (display only). */
+  /**
+   * Write a natural-language rationale for a rebalance (display only). Falls back
+   * to a deterministic summary of the pre/post weight deltas if the LLM is
+   * unavailable or returns nothing, so the keeper can always persist a rationale
+   * (golden rule #1: display-only, never an executed number).
+   */
   async explainRebalance(input: {
     preWeights: Record<string, number>;
     postWeights: Record<string, number>;
     swaps: { asset: string; deltaUsd: string }[];
   }): Promise<string> {
-    return this.complete([
-      {
-        role: 'system',
-        content:
-          'You explain portfolio rebalances to a non-expert in 2-3 sentences. ' +
-          'Describe what changed and why; do not invent numbers beyond those given.',
-      },
-      { role: 'user', content: JSON.stringify(input) },
-    ]);
+    try {
+      const reply = (
+        await this.complete([
+          {
+            role: 'system',
+            content:
+              'You explain portfolio rebalances to a non-expert in 2-3 sentences. ' +
+              'Describe what changed and why; do not invent numbers beyond those given.',
+          },
+          { role: 'user', content: JSON.stringify(input) },
+        ])
+      ).trim();
+      if (reply) return reply;
+      this.logger.warn(
+        'explainRebalance: empty reply; using deterministic rationale',
+      );
+    } catch (err) {
+      this.logger.warn(
+        `explainRebalance: LLM unavailable; using deterministic rationale: ${(err as Error).message}`,
+      );
+    }
+    return deterministicRationale(input.preWeights, input.postWeights);
   }
 
-  /** Answer a question about a portfolio (display only). */
+  /**
+   * Answer a question about a portfolio (display only). Degrades gracefully to a
+   * fixed "unavailable" reply if the LLM is unavailable or returns nothing, so
+   * chat never throws.
+   */
   async answer(snapshot: unknown, question: string): Promise<string> {
-    return this.complete([
-      {
-        role: 'system',
-        content:
-          'You answer questions about the user’s portfolio using only the ' +
-          'provided snapshot. Be concise and never give financial guarantees.',
-      },
-      {
-        role: 'user',
-        content: `Snapshot: ${JSON.stringify(snapshot)}\n\nQ: ${question}`,
-      },
-    ]);
+    try {
+      const reply = (
+        await this.complete([
+          {
+            role: 'system',
+            content:
+              'You answer questions about the user’s portfolio using only the ' +
+              'provided snapshot. Be concise and never give financial guarantees.',
+          },
+          {
+            role: 'user',
+            content: `Snapshot: ${JSON.stringify(snapshot)}\n\nQ: ${question}`,
+          },
+        ])
+      ).trim();
+      if (reply) return reply;
+      this.logger.warn('answer: empty reply; using fallback');
+    } catch (err) {
+      this.logger.warn(
+        `answer: LLM unavailable; using fallback: ${(err as Error).message}`,
+      );
+    }
+    return ANSWER_UNAVAILABLE;
   }
 }

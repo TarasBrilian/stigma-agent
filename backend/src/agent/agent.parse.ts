@@ -115,3 +115,35 @@ export function heuristicProfile(answers: RiskAnswer[]): ProfileReply {
     score,
   };
 }
+
+/**
+ * Deterministic, display-only rebalance rationale from the pre/post target weights
+ * (bps) — the fallback when the LLM is unavailable. It only describes the given
+ * weight changes (golden rule #1: it invents no executed numbers). Moves under
+ * 0.1% are treated as dust.
+ */
+export function deterministicRationale(
+  preWeights: Record<string, number>,
+  postWeights: Record<string, number>,
+): string {
+  const assets = new Set([
+    ...Object.keys(preWeights),
+    ...Object.keys(postWeights),
+  ]);
+  const moves = [...assets]
+    .map((asset) => ({
+      asset,
+      deltaBps: (postWeights[asset] ?? 0) - (preWeights[asset] ?? 0),
+    }))
+    .filter((m) => Math.abs(m.deltaBps) >= 10)
+    .sort((a, b) => Math.abs(b.deltaBps) - Math.abs(a.deltaBps));
+
+  if (moves.length === 0) {
+    return 'Rebalanced to the target allocation; the portfolio was already on target, so only minor adjustments were made.';
+  }
+  const parts = moves.map((m) => {
+    const sign = m.deltaBps > 0 ? '+' : '-';
+    return `${m.asset} ${sign}${(Math.abs(m.deltaBps) / 100).toFixed(1)}%`;
+  });
+  return `Rebalanced toward the target allocation — adjusted ${parts.join(', ')}.`;
+}

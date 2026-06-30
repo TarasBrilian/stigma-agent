@@ -6,9 +6,14 @@ Execution backlog for AI coding agents working in `backend/`. Read
 invariant it must not break.
 
 The backend is the **linchpin of the demo**: it is the only module that talks to
-Casper (`chain`) and the only one that calls OpenRouter (`agent`). Today the
-`chain` integration is a stub, so most live-state endpoints throw. Filling it is
-the highest-leverage work in the whole repo.
+Casper (`chain`) and the only one that calls OpenRouter (`agent`). The `chain`
+integration is now **complete and live-verified on casper-test** — reads
+(`viewState`/`getPrices`), writes (`executeBuy`/`rebalance`/`setPrice`/`register`/
+`faucetMint`, all confirmed on-chain), the `register → POST /portfolios` wiring,
+and the **deposit→buy** loop all work end to end. The remaining highest-leverage
+work is the **rebalance→`RebalanceLog`** side of the loop (rationale + history),
+**agent resilience** (no-OpenRouter fallbacks), and the **DB-backed flows**
+(which need a running Postgres) — see §1 below for what's left at P0.
 
 ## How to read this file
 
@@ -22,11 +27,13 @@ the highest-leverage work in the whole repo.
 
 ```
 contract: vault deployed + wired  ─┐
-frontend: user signs deposit       ├─►  BACKEND observes Deposited ──► executeBuy (agent key)
+frontend: user signs deposit       ├─►  BACKEND keeper polls idle mUSDC ──► executeBuy (agent key)
                                    │     BACKEND keeper: prices ──► drift ──► rebalance (agent key)
 backend reads (viewState/getPrices)┘     BACKEND relays live state ──► frontend renders
 ```
-Nothing renders live value and no agent action fires until `ChainService` is real.
+`ChainService` is real and live-verified; deposit→buy fires via the keeper's
+idle-poll (not an event). What's left is the rebalance→log/rationale side and the
+DB-backed flows below.
 
 ---
 
@@ -132,6 +139,36 @@ consistently across layers; today only the off-chain metadata mirror exists.
       (mBTC +$10 · mNVDAx +$15 · mXAUT +$20 · mGOOGLx +$5). Tools: `bin/deploy_vault.rs` `VAULT_FUND`,
       `backend/scripts/validate-invest.ts`.
 
+### P0 · Keeper rebalance → `RebalanceLog` (the rebalance side of the loop)
+`triggerRebalance` already wires `viewState`/`getPrices` → `decideRebalance` →
+`billing.chargeRebalanceFee` → `chain.rebalance` (live ✓) → `agent.explainRebalance`
+→ write `RebalanceLog`. It has NEVER completed end-to-end because (a)
+`agent.explainRebalance` THROWS without an OpenRouter key (no fallback, unlike
+`profileRisk`), aborting the trigger before the log is written, and (b) the
+`RebalanceLog` write needs a running Postgres.
+- [x] Make `agent.explainRebalance` (and `agent.answer`) RESILIENT: on OpenRouter
+      failure/absence, fall back instead of throwing — mirror the `profileRisk` pattern.
+      DONE: `explainRebalance` falls back to `deterministicRationale(pre, post)` — a
+      display-only summary of the biggest pre/post weight deltas (dust < 0.1% → "on
+      target"); `answer` degrades to a fixed "assistant unavailable" reply. Both also
+      fall back on an empty LLM reply. So the keeper rebalance and chat no longer break
+      without `OPENROUTER_API_KEY`. Covered by `agent.service.spec.ts` (no-key paths) +
+      `agent.parse.spec.ts` (`deterministicRationale` both branches).
+      ref: `src/agent/agent.service.ts` (`explainRebalance`/`answer`); `src/agent/agent.parse.ts` (`deterministicRationale`)
+      🔴 golden rule #1 (rationale is display-only, never an executed number) · #3 (LLM only in `agent`)
+      done: `explainRebalance`/`answer` return a fallback (not a throw) with no `OPENROUTER_API_KEY` ✓
+- [~] Run the full keeper rebalance end-to-end against Postgres: `POST /keeper/rebalance/:vault`
+      (force) → fee → `chain.rebalance` → rationale → `RebalanceLog` row; confirm `GET
+      /portfolios/:vault/activity` returns it. Needs Postgres + the funded agent key (gas).
+      MOCKED INTEGRATION DONE: `keeper.service.spec.ts` (`triggerRebalance`) proves a forced
+      rebalance completes WITHOUT `OPENROUTER_API_KEY` and persists a `RebalanceLog` with a
+      non-empty deterministic rationale + the x402 receipt (chain/prisma/billing mocked, real agent).
+      STILL TODO: the same against a RUNNING Postgres + funded agent key (real `RebalanceLog` row +
+      `GET …/activity`).
+      ref: `src/keeper/keeper.service.ts` (`triggerRebalance`); `prisma/schema.prisma` (`RebalanceLog`)
+      🔴 golden rule #6 (keeper guards stay) · #7 (x402 only on rebalance)
+      done: a forced rebalance persists a `RebalanceLog` with rationale; the activity endpoint shows it
+
 ### P0 · ChainService: demo writes (`setPrice` + `faucetMint`) + PriceLog
 Demo controls must keep working (demo-readiness rule).
 - [x] Implement `setPrice(token, priceUsd6)` and `faucetMint(owner, amountUsd6)`.
@@ -167,6 +204,19 @@ The contract deploys a `VaultRegistry`, but the backend env still names a factor
       done: `feedOracle` cron pushes real prices (logged `source = keeper`); no longer hits the catch/skip
       note: keep `feedOracle`'s try/catch — a price-source outage must not crash the loop
 
+### P1 · Chat: snapshot from live state (not just the DB mirror)
+`chat.service.ask` persists the Q&A and answers from a snapshot, but the snapshot
+is built from the DB MIRROR only (`chat.service.ts:30`) — name/profile/goal, no
+live value. The file flags this as a TODO now that `chain.viewState` exists. (The
+no-OpenRouter `agent.answer` fallback is covered by the rebalance agent-resilience
+task above.)
+- [ ] Build the chat snapshot from live `chain.viewState` + `getPrices` (holdings,
+      current value, current vs target allocation, progress) merged with the mirror, so
+      answers reflect real state — not only the static config.
+      ref: `src/portfolio/chat.service.ts:30` (snapshot); `src/chain/chain.service.ts` (`viewState`)
+      🔴 golden rule #3 (read live state via `chain`; the LLM stays in `agent`)
+      done: an answer can reference the portfolio's current value/holdings, not only name/profile/goal
+
 ### P1 · API authentication & authorization (none today)
 Every endpoint is open; `register` trusts any `owner`, and demo endpoints (faucet,
 oracle override, rebalance-now) are unauthenticated and powerful.
@@ -199,6 +249,17 @@ oracle override, rebalance-now) are unauthenticated and powerful.
 - [ ] Replace `number` compound-interest math with a decimal/bigint library (e.g. `decimal.js`).
       ref: `src/pricing/pricing.service.ts:46` (documented `number` use — display-only, never executed)
 
+### P2 · `ProjectionCache` — populate or remove (schema/code drift)
+The `ProjectionCache` model exists in `prisma/schema.prisma` but is NOT written or
+read anywhere in `src/` — the projection is recomputed live each request
+(`pricing.service.projectContribution`), per the architecture's "recompute live"
+choice. Resolve the dead-model inconsistency.
+- [ ] Either persist the last projection into `ProjectionCache` on each `projection()`
+      call (serve it as a fast/fallback read), OR drop the model from the schema and note
+      that the projection is intentionally always-live.
+      ref: `prisma/schema.prisma` (`ProjectionCache`); `src/portfolio/portfolio.service.ts` (`projection`)
+      done: no Prisma model is defined-but-unused; the projection's caching policy is explicit
+
 ### P2 · Agent-key production direction
 - [ ] Track the move from a single hot key to Casper account-abstraction / session keys
       (scoped, revocable, spend-capped). Design note only until contracts support it.
@@ -214,11 +275,17 @@ oracle override, rebalance-now) are unauthenticated and powerful.
       ref: `src/**/*.spec.ts`
 
 ### P1 · Cover the new chain wiring
-- [ ] Unit-test `ChainService` with a mocked RPC: CLValue encode/decode round-trips for
-      `viewState`/`getPrices`; assert no withdraw deploy can be constructed with the agent key.
+- [~] Unit-test `ChainService`: write routing + arg construction (`chain.write.spec.ts`),
+      `accountKey` (`chain.service.spec.ts`), and a LIVE decode cross-check
+      (`chain.live.spec.ts`, opt-in) are done. STILL TODO: a mocked-RPC encode/decode
+      round-trip for `viewState`/`getPrices`, and an explicit assertion that `ChainService`
+      exposes no withdraw/fund-moving method (golden rule #4 — structurally none today).
       ref: `src/chain/chain.service.ts`
-- [ ] Integration test: deposit → (event) → `executeBuy` updates holdings; redelivery is idempotent.
-- [ ] Integration test: `triggerRebalance(force)` end-to-end writes a `RebalanceLog` with rationale + receipt.
+- [x] Integration test: deposit → `executeBuy` updates holdings; redelivery is idempotent.
+      DONE: idempotency unit-tested (`keeper.service.spec.ts` in-flight lock) + LIVE-VERIFIED
+      end-to-end (fund $50 idle → `investIdle` → `executeBuy` → idle 0; see the deposit→buy section).
+- [ ] Integration test: `triggerRebalance(force)` end-to-end writes a `RebalanceLog` with rationale +
+      receipt — tracked as the **P0 · Keeper rebalance → `RebalanceLog`** task above (needs Postgres).
 
 ### P1 · CI pipeline (none exists)
 - [ ] Add `.github/workflows/backend.yml`: `pnpm install`, `pnpm prisma generate`,

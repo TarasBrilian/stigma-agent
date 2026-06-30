@@ -1,4 +1,5 @@
 import {
+  deterministicRationale,
   extractJson,
   heuristicProfile,
   parseAllocationReply,
@@ -59,6 +60,24 @@ describe('agent.parse', () => {
 
     it('defaults to Conservative when the horizon is missing', () => {
       expect(heuristicProfile([]).profile).toBe('Conservative');
+    });
+  });
+
+  describe('deterministicRationale', () => {
+    it('describes the biggest weight moves, largest first', () => {
+      const r = deterministicRationale(
+        { mUSDC: 5000, mBTC: 3000, mXAUT: 2000 },
+        { mUSDC: 2000, mBTC: 3000, mXAUT: 5000 }, // mUSDC -30%, mXAUT +30%
+      );
+      expect(r).toMatch(/mUSDC -30\.0%|mXAUT \+30\.0%/);
+      expect(r).toContain('mXAUT +30.0%');
+      expect(r).toContain('mUSDC -30.0%');
+      expect(r).not.toContain('mBTC'); // unchanged
+    });
+
+    it('reports "on target" when moves are dust (< 0.1%)', () => {
+      const r = deterministicRationale({ mBTC: 2000 }, { mBTC: 2001 });
+      expect(r).toMatch(/on target/i);
     });
   });
 });
