@@ -4,6 +4,7 @@ import {
   decimalToUsd6,
   isValidAllocation,
   usd6ToDecimal,
+  usdToUsd6,
   valueUsd6,
   weightsBps,
 } from './money';
@@ -18,6 +19,13 @@ describe('money', () => {
     it('round-trips raw 6-dp back to dollars', () => {
       expect(usd6ToDecimal('1234560000').toFixed(6)).toBe('1234.560000');
       expect(decimalToUsd6(usd6ToDecimal('999999'))).toBe('999999');
+    });
+
+    it('converts a human USD price (number or string) to raw 6-dp bigint', () => {
+      expect(usdToUsd6(65000.5)).toBe(65_000_500_000n); // no float drift
+      expect(usdToUsd6('2350')).toBe(2_350_000_000n);
+      expect(usdToUsd6(1)).toBe(1_000_000n);
+      expect(usdToUsd6('0.123456')).toBe(123_456n);
     });
   });
 

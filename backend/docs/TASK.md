@@ -205,12 +205,22 @@ The contract deploys a `VaultRegistry`, but the backend env still names a factor
 
 ## 2. Production hardening (P1 / P2)
 
-### P1 · PricingService.fetchPrices — real reference prices
-- [ ] Fetch CoinGecko (BTC, gold→`mXAUT`) + a stock source (NVDA→`mNVDAx`, GOOGL→`mGOOGLx`);
+### P1 · PricingService.fetchPrices — real reference prices — ✅ DONE
+- [x] Fetch CoinGecko (BTC, gold→`mXAUT`) + a stock source (NVDA→`mNVDAx`, GOOGL→`mGOOGLx`);
       `mUSDC` pinned to `1_000_000`. Return raw USD 6 dp. Map onto the canonical asset order.
-      ref: `src/pricing/pricing.service.ts:32` (replaces the `throw`)
-      done: `feedOracle` cron pushes real prices (logged `source = keeper`); no longer hits the catch/skip
-      note: keep `feedOracle`'s try/catch — a price-source outage must not crash the loop
+      DONE: `fetchPrices` fetches CoinGecko `simple/price` (`bitcoin`→mBTC, `tether-gold`→mXAUT,
+      keyless; optional `COINGECKO_API_KEY` demo header) and a keyed stock source (Twelve Data shape
+      by default, `STOCK_API_URL`-overridable; NVDA→mNVDAx, GOOGL→mGOOGLx via `PRICE_API_KEY`),
+      pins `mUSDC`=1_000_000, and returns raw USD 6 dp. Decimal→raw conversion is exact via the new
+      `money.usdToUsd6` (no float). Both sources fetched concurrently with an 8s `AbortSignal.timeout`;
+      malformed/missing prices and non-2xx responses THROW with a source label (never the keyed URL).
+      This unblocks the keeper price-feed loop AND the `keeper` `PriceLog` rows (the feed no longer
+      throws unconditionally). Covered by `pricing.service.spec.ts` (mapping, missing-key, non-OK,
+      malformed) + `money.spec.ts` (`usdToUsd6`).
+      ref: `src/pricing/pricing.service.ts` (`fetchPrices`/`fetchCryptoPrices`/`fetchStockPrices`); `src/config/money.ts` (`usdToUsd6`)
+      done: `feedOracle` cron pushes real prices (logged `source = keeper`); no longer hits the catch/skip ✓
+      note: `feedOracle`'s try/catch is KEPT — a price-source outage throws here and the loop skips the cycle
+      (it does NOT push a stale price). STILL NEEDS: a real `PRICE_API_KEY` provisioned to push live.
 
 ### P1 · Chat: snapshot from live state (not just the DB mirror) — ✅ DONE
 - [x] Build the chat snapshot from live `chain.viewState` + `getPrices` merged with the mirror.

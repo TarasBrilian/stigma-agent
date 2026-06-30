@@ -24,6 +24,19 @@ export function usd6ToDecimal(raw: string): Prisma.Decimal {
   return new Prisma.Decimal(raw).div(1_000_000);
 }
 
+/**
+ * Human USD (a decimal number or string from a price feed) -> raw 6-dp bigint,
+ * e.g. 65000.5 -> 65000500000n. Exact via Decimal (numbers are stringified first
+ * so the shortest round-trippable form is parsed, not a float artifact); the
+ * sub-micro-dollar remainder is rounded. Used to map oracle prices to raw 6 dp.
+ */
+export function usdToUsd6(value: string | number): bigint {
+  const dec = new Prisma.Decimal(
+    typeof value === 'number' ? String(value) : value,
+  );
+  return BigInt(dec.times(1_000_000).toFixed(0));
+}
+
 type Holdings = Partial<Record<string, string>>;
 type Prices = Partial<Record<AssetSymbol, bigint>>;
 

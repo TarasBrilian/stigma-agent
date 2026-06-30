@@ -67,7 +67,8 @@ TOKEN_MXAUT_HASH=hash-...
 TOKEN_MGOOGLX_HASH=hash-...
 
 # prices & billing
-PRICE_API_KEY=...                     # CoinGecko / stock source
+PRICE_API_KEY=...                     # stock source key (NVDA/GOOGL); Twelve Data by default
+# COINGECKO_API_KEY=...                # optional CoinGecko demo key (BTC/gold work keyless)
 X402_FACILITATOR_URL=...
 
 # keeper cadence
