@@ -1,0 +1,65 @@
+name: backend
+
+# Runs the backend's definition-of-done gates on every change that touches
+# backend/ (and on changes to this workflow). Tests are unit-only and fully
+# mocked (no DB, no network), so no Postgres service is needed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: this workflow only reads the repo (no comments/pushes).
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Backstop for golden rule #8: no agent key / .env / secrets ever committed.
+      - name: Assert no secrets are committed
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)\.env$|\.pem$|(^|/)secrets/'; then
+            echo "::error::A secret-like file (.env / .pem / secrets/) is tracked in git"
+            exit 1
+          fi
+          if git grep -lE -- '-----BEGIN [A-Z ]*PRIVATE KEY-----'; then
+            echo "::error::PEM private key material found in tracked files"
+            exit 1
+          fi
+          echo "No tracked secrets found."
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma generate
+      - run: pnpm lint:check
+      - run: pnpm test
+      - run: pnpm build

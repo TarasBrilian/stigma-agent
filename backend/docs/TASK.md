@@ -253,9 +253,15 @@ oracle override, rebalance-now) are unauthenticated and powerful.
       🔴 golden rule #7 (x402 ONLY on rebalance — do not gate other endpoints)
       done: a rebalance pulls the fee and persists a real receipt id
 
-### P1 · Agent-key & secrets hygiene
-- [ ] Load the key only from `AGENT_SECRET_KEY_PATH`; assert `secrets/` and `.env` are gitignored (they are — keep it so).
+### P1 · Agent-key & secrets hygiene — ~ PARTIAL
+- [~] Load the key only from `AGENT_SECRET_KEY_PATH`; assert `secrets/` and `.env` are gitignored (they are — keep it so).
       ref: `../ARCHITECTURE.md` §8 · 🔴 golden rule #8
+      DONE (the CI/grep half): the backend CI workflow has an "Assert no secrets are committed" step that
+      fails if any `.env`/`.pem`/`secrets/` file is tracked or any PEM private-key header appears in tracked
+      content (verified locally — no match; only `*.env.example` templates are tracked). The key is already
+      loaded only from `AGENT_SECRET_KEY_PATH` and never logged/returned (see the chain `signer` task).
+      ref: `.github/workflows/backend.yml`
+      STILL TODO: an explicit unit/grep assertion that the key never appears in a log/response/error payload.
       done: key never appears in logs, responses, or errors; CI/grep check for accidental leakage
 
 ### P1 · Populate `RebalanceLog.swaps` (currently always `[]`)
@@ -306,10 +312,19 @@ choice. Resolve the dead-model inconsistency.
 - [ ] Integration test: `triggerRebalance(force)` end-to-end writes a `RebalanceLog` with rationale +
       receipt — tracked as the **P0 · Keeper rebalance → `RebalanceLog`** task above (needs Postgres).
 
-### P1 · CI pipeline (none exists)
-- [ ] Add `.github/workflows/backend.yml`: `pnpm install`, `pnpm prisma generate`,
-      `pnpm lint`, `pnpm test`. (No `.github/` directory exists yet.)
-      done: CI runs on PRs touching `backend/`
+### P1 · CI pipeline — ✅ DONE
+- [x] Add `.github/workflows/backend.yml`: `pnpm install`, `pnpm prisma generate`,
+      `pnpm lint`, `pnpm test`.
+      DONE: `.github/workflows/backend.yml` runs on `pull_request` + `push` to `main` filtered to
+      `backend/**` (and the workflow file). Steps: checkout → "Assert no secrets are committed"
+      (golden #8 backstop) → pnpm 9 + Node 22 (pnpm cache) → `pnpm install --frozen-lockfile` →
+      `pnpm prisma generate` → `pnpm lint:check` → `pnpm test` → `pnpm build`. Uses a new
+      `lint:check` script (eslint WITHOUT `--fix`, `--max-warnings 0`) so CI CATCHES lint/format
+      issues instead of silently auto-fixing them. Tests are unit-only/mocked, so no Postgres
+      service is provisioned. Every step verified locally (secrets-check no-match, frozen install OK,
+      lint:check exit 0, 78 tests pass, build exit 0; YAML validated).
+      ref: `.github/workflows/backend.yml`; `backend/package.json` (`lint:check`)
+      done: CI runs on PRs touching `backend/` ✓
 
 ---
 
