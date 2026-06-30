@@ -5,11 +5,39 @@
  * mistakes), then we assert it targets the right contract + entry point + gas.
  *
  * On-chain acceptance of the TransactionV1 is validated separately by the opt-in
- * live test (see chain.live.spec.ts pattern). Infra hashes come from backend/.env.
+ * live test (see chain.live.spec.ts pattern). Infra hashes come from backend/.env
+ * when present; in CI (no .env) any missing hash falls back to a valid-format
+ * dummy below, so this routing test is hermetic and never needs committed hashes.
  */
 import 'dotenv/config';
 import { Args } from 'casper-js-sdk';
 import { ChainService } from './chain.service';
+
+/**
+ * Fill any MISSING infra hash with a valid-format dummy. Token hashes are parsed
+ * by `Key.newKey`, so they must be `hash-<64 hex>`. Real backend/.env values
+ * (local dev) are left untouched; only absent keys (CI) get a fallback, restored
+ * afterwards so nothing leaks into other specs in the same worker.
+ */
+const HASH = (c: string): string => `hash-${c.repeat(64)}`;
+const ENV_FALLBACK: Record<string, string> = {
+  ORACLE_HASH: HASH('a'),
+  VAULT_REGISTRY_HASH: HASH('b'),
+  TOKEN_MUSDC_HASH: HASH('c'),
+  TOKEN_MBTC_HASH: HASH('d'),
+};
+const envAdded: string[] = [];
+beforeAll(() => {
+  for (const [k, v] of Object.entries(ENV_FALLBACK)) {
+    if (!process.env[k]) {
+      process.env[k] = v;
+      envAdded.push(k);
+    }
+  }
+});
+afterAll(() => {
+  for (const k of envAdded) delete process.env[k];
+});
 
 /** The private `call` signature, exposed for a typed spy (no `any` leakage). */
 type CallFn = (
