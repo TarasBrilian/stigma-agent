@@ -1,8 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { readFileSync } from 'node:fs';
 import {
+  Args,
+  CLValue,
+  ContractCallBuilder,
   HttpHandler,
+  Key,
+  KeyAlgorithm,
   ParamDictionaryIdentifier,
   ParamDictionaryIdentifierContractNamedKey,
+  PrivateKey,
   RpcClient,
 } from 'casper-js-sdk';
 import { ASSET_SYMBOLS, type AssetSymbol } from '../config/constants';
@@ -56,6 +63,15 @@ const VAULT_FIELD = {
   createdYear: 7,
 } as const;
 
+/** Gas (motes) per write. Triggers do several cross-contract swaps, so they pay
+ *  more than the cheap single-write calls. Tunable via env. */
+const TRIGGER_GAS_MOTES = Number(
+  process.env.AGENT_TRIGGER_GAS_MOTES ?? 120_000_000_000, // 120 CSPR (execute_buy / rebalance)
+);
+const WRITE_GAS_MOTES = Number(
+  process.env.AGENT_WRITE_GAS_MOTES ?? 10_000_000_000, // 10 CSPR (set_price / register / faucet)
+);
+
 /** Minimal shapes of the RPC `rawJSON` we read (keeps the reads off `any`). */
 interface RawContractPackage {
   stored_value?: {
@@ -81,7 +97,8 @@ export function isValueNotFound(err: unknown): boolean {
 
 /**
  * The ONLY module that talks to Casper (golden rule #2). It reads vault/oracle
- * state and (next) holds the AGENT HOT KEY for `execute_buy` / `rebalance`.
+ * state and holds the AGENT HOT KEY for the writes (`execute_buy` / `rebalance`
+ * on a vault; plus `set_price` / `register` / `faucet_mint`).
  *
  * Reads use direct global-state / dictionary queries (Odra stores all `Var`/
  * `Mapping` data in one "state" dictionary; CEP-18 balances in their own named
@@ -97,6 +114,8 @@ export class ChainService {
   private readonly logger = new Logger(ChainService.name);
   private readonly cfg = loadCasperConfig();
   private rpc?: RpcClient;
+  /** The agent hot key, loaded once from disk. 🔴 Never logged or returned. */
+  private signingKey?: PrivateKey;
   /** package-hash (hex) → current contract-hash (hex). Resolved once per package. */
   private readonly contractHashCache = new Map<string, string>();
 
@@ -207,26 +226,73 @@ export class ChainService {
     return out;
   }
 
-  /* ------------------------- agent writes (next) ------------------------- */
+  /* ------------------------------- writes -------------------------------- */
+  // Every write is signed by the single hot key at AGENT_SECRET_KEY_PATH and
+  // submitted as a TransactionV1 contract call (see `call`). 🔴 On a VAULT this
+  // key may ONLY reach `execute_buy` / `rebalance` (enforced on-chain); never
+  // construct a withdraw or any fund-moving vault call with it (golden #4/#8).
+  // `set_price` (oracle keeper), `register` (permissionless) and `faucet_mint`
+  // are operational/demo calls — not agent-vault actions.
 
-  /** Keeper writes a reference price to the mock oracle. */
-  setPrice(token: AssetSymbol, priceUsd6: bigint): Promise<void> {
-    return this.notImplemented('setPrice', `${token}=${priceUsd6}`);
+  /** Agent trigger: invest idle mUSDC across the computed target (no amounts). */
+  executeBuy(vaultHash: string): Promise<string> {
+    return this.call(
+      vaultHash,
+      'execute_buy',
+      Args.fromMap({}),
+      TRIGGER_GAS_MOTES,
+    );
   }
 
-  /** Agent triggers a buy; the vault derives amounts in-contract (no amounts here). */
-  executeBuy(vaultHash: string): Promise<void> {
-    return this.notImplemented('executeBuy', vaultHash);
+  /** Agent trigger: rebalance holdings back to the exact computed target. */
+  rebalance(vaultHash: string): Promise<string> {
+    return this.call(
+      vaultHash,
+      'rebalance',
+      Args.fromMap({}),
+      TRIGGER_GAS_MOTES,
+    );
   }
 
-  /** Agent triggers a rebalance back to the exact computed target (slippage-capped). */
-  rebalance(vaultHash: string): Promise<void> {
-    return this.notImplemented('rebalance', vaultHash);
+  /** Keeper: write a reference price (raw USD 6dp) to the mock oracle. */
+  setPrice(token: AssetSymbol, priceUsd6: bigint): Promise<string> {
+    const oracle = requireValue(this.cfg.oracleHash, 'ORACLE_HASH');
+    const tokenHash = requireValue(
+      this.cfg.tokenHashes[token],
+      `TOKEN_${token.toUpperCase()}_HASH`,
+    );
+    const args = Args.fromMap({
+      token: CLValue.newCLKey(Key.newKey(tokenHash)),
+      price: CLValue.newCLUInt256(priceUsd6.toString()),
+    });
+    return this.call(oracle, 'set_price', args, WRITE_GAS_MOTES);
   }
 
-  /** Demo: mint test mUSDC to an owner via the token faucet. */
-  faucetMint(owner: string, amountUsd6: bigint): Promise<void> {
-    return this.notImplemented('faucetMint', `${owner}:${amountUsd6}`);
+  /** Permissionless: record `vault` under `owner` in the registry (moves no funds). */
+  register(owner: string, vault: string): Promise<string> {
+    const registry = requireValue(this.cfg.registryHash, 'VAULT_REGISTRY_HASH');
+    const args = Args.fromMap({
+      owner: CLValue.newCLKey(Key.newKey(owner)),
+      vault: CLValue.newCLKey(Key.newKey(vault)),
+    });
+    return this.call(registry, 'register', args, WRITE_GAS_MOTES);
+  }
+
+  /**
+   * Demo faucet: mint test mUSDC. ⚠️ The contract `faucet_mint` mints to the
+   * CALLER (this signing key) — there is no recipient arg — so this funds the
+   * BACKEND account, not `owner`. To fund a user's wallet for a deposit, the user
+   * signs `faucet_mint` in the frontend. `owner` is kept for the API shape only.
+   */
+  faucetMint(owner: string, amountUsd6: bigint): Promise<string> {
+    const musdc = requireValue(this.cfg.tokenHashes.mUSDC, 'TOKEN_MUSDC_HASH');
+    this.logger.warn(
+      `faucetMint funds the signing key, not ${owner} (contract faucet is caller-minted)`,
+    );
+    const args = Args.fromMap({
+      amount: CLValue.newCLUInt256(amountUsd6.toString()),
+    });
+    return this.call(musdc, 'faucet_mint', args, WRITE_GAS_MOTES);
   }
 
   /* ----------------------------- internals ----------------------------- */
@@ -237,6 +303,51 @@ export class ChainService {
       this.rpc = new RpcClient(new HttpHandler(url));
     }
     return this.rpc;
+  }
+
+  /**
+   * Lazily load the hot key from `AGENT_SECRET_KEY_PATH`. Algorithm is detected
+   * from the PEM header (Casper EC keys are secp256k1; otherwise ed25519).
+   * 🔴 Golden rule #8: this value is never logged or returned over the API.
+   */
+  private signer(): PrivateKey {
+    if (!this.signingKey) {
+      const path = requireValue(this.cfg.agentKeyPath, 'AGENT_SECRET_KEY_PATH');
+      const pem = readFileSync(path, 'utf8');
+      const algorithm = pem.includes('EC PRIVATE KEY')
+        ? KeyAlgorithm.SECP256K1
+        : KeyAlgorithm.ED25519;
+      this.signingKey = PrivateKey.fromPem(pem, algorithm);
+    }
+    return this.signingKey;
+  }
+
+  /**
+   * Build → sign → submit a TransactionV1 contract call by package hash; returns
+   * the transaction hash. Errors propagate (golden rule: don't swallow chain
+   * errors); a failed swap leg inside the call still surfaces as a tx failure.
+   */
+  private async call(
+    packageHash: string,
+    entryPoint: string,
+    args: Args,
+    paymentMotes: number,
+  ): Promise<string> {
+    const key = this.signer();
+    const pkgHex = packageHash.replace(/^(hash-|contract-)/, '');
+    const tx = new ContractCallBuilder()
+      .from(key.publicKey)
+      .byPackageHash(pkgHex)
+      .entryPoint(entryPoint)
+      .runtimeArgs(args)
+      .chainName(this.cfg.network)
+      .payment(paymentMotes)
+      .build();
+    tx.sign(key);
+    await this.client().putTransaction(tx);
+    const hash = tx.hash.toHex();
+    this.logger.log(`${entryPoint} → tx ${hash}`);
+    return hash;
   }
 
   /** Resolve a package hash to its current contract hash (Casper legacy entity). */
@@ -308,12 +419,5 @@ export class ChainService {
     itemKey: string,
   ): Promise<Uint8Array | null> {
     return this.readDictBytes(packageHash, dictName, itemKey);
-  }
-
-  private notImplemented(method: string, detail?: string): never {
-    this.logger.warn(
-      `ChainService.${method}(${detail ?? ''}) not implemented (network=${this.cfg.network})`,
-    );
-    throw new Error(`ChainService.${method}: not implemented`);
   }
 }

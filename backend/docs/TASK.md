@@ -40,7 +40,9 @@ snapshot) depends on these two reads. Implement them first.
 - [x] Implement `viewState(vaultHash)`: read the vault's stored fields + holdings and
       assemble the `VaultState` interface.
       ref: `src/chain/chain.service.ts` (`viewState`); decoders in `src/chain/odra.codec.ts`
-      done: decode unit-tested (`odra.codec.spec.ts`); FULL live e2e pending a deployed vault (none on testnet yet — `mUSDC.total_supply == 0`).
+      done: ✅ VERIFIED LIVE on casper-test against vault `hash-5e83185e…` — `chain.live.spec.ts`
+      (opt-in via `LIVE_VAULT_HASH`) asserts the decoded owner/agent/profile/base/holdings/config
+      match the on-chain state (mUSDC 0 · mBTC 30769 · mNVDAx 30000000 · mXAUT 2000000 · mGOOGLx 6666666).
       NOTE: Casper 2.0 has NO off-chain view-call, so `view_state()` cannot be invoked for its
       return value. Instead each stored `Var`/`Mapping` is read from the Odra "state" dictionary
       + CEP-18 `balances` dict; the identical read path is verified live via `getPrices`.
@@ -58,14 +60,24 @@ snapshot) depends on these two reads. Implement them first.
       done: ✅ VERIFIED LIVE on casper-test — mUSDC $1 · mBTC $65k · mNVDAx $100 · mXAUT $2k · mGOOGLx $150.
 
 ### P0 · ChainService: agent writes (`executeBuy` + `rebalance`)
-- [ ] Load the agent hot key from `AGENT_SECRET_KEY_PATH` at startup; sign deploys with it.
-      ref: `src/chain/chain.service.ts:53,58`
-      🔴 golden rule #8 (never log or return the agent key) · #4 (never construct a withdraw/fund-moving deploy with it)
-- [ ] Implement `executeBuy(vaultHash)` and `rebalance(vaultHash)` — call the vault
+- [x] Load the agent hot key from `AGENT_SECRET_KEY_PATH`; sign with it.
+      DONE: `signer()` lazily loads the PEM (algorithm auto-detected from the header — Casper EC keys
+      are secp256k1, else ed25519) and caches it; never logged or returned (golden #8).
+      ref: `src/chain/chain.service.ts` (`signer`)
+- [x] Implement `executeBuy(vaultHash)` and `rebalance(vaultHash)` — call the vault
       entry points with the agent key; pass **no amounts** (derived in-contract).
+      DONE: both route through a shared `call()` (TransactionV1 contract-call by package hash,
+      built/signed/submitted via casper-js-sdk v5). Routing + arg construction unit-tested
+      (`chain.write.spec.ts`); errors propagate (don't swallow). `chain.module` unchanged.
+      ref: `src/chain/chain.service.ts` (`executeBuy`/`rebalance`/`call`)
+- [ ] **(a) Live-validate the writes on testnet.** Point `AGENT_SECRET_KEY_PATH` at a FUNDED key
+      (for the smoke vault, agent == deployer == `../../contract/casper_account.pem`), then trigger
+      `executeBuy` against vault `hash-5e83185e…` (idle mUSDC == 0 → near-no-op, minimal gas) to
+      confirm the TransactionV1 + secp256k1 signature + arg encoding are accepted and execute on
+      chain; then a real `rebalance` end to end. This is the writes' analogue of the read cross-check
+      — implementation + routing are tested, but on-chain acceptance is unproven. Needs gas (not CI).
+      🔴 golden rule #8 (never log/return the key) · #4 (no withdraw/fund-moving call with it)
       done: `POST /keeper/rebalance/:vault` executes on testnet and a `RebalanceLog` row is written
-- [ ] Confirm a failed swap leg surfaces (don't swallow); a failed guard aborts the trigger.
-      ref: `../CLAUDE.md` "Errors"
 
 ### P0 · Vault creation & registration path (align with frontend + contract)
 A vault must exist before any deposit/buy. Decide and implement the creation path
@@ -77,12 +89,17 @@ consistently across layers; today only the off-chain metadata mirror exists.
       The user becomes deployer + `owner`; the backend calls the permissionless,
       fund-free `register` (NOT the agent key) using the vault address the frontend
       reports. `chain.deployVault` is the documented FALLBACK only, not the accepted path.
-- [ ] Add `chain.register(owner, vault)` — a permissionless, no-funds call (no agent
-      key required). There is **no chain event to observe a vault deploy** (`init`
-      emits nothing; `VaultRegistered` only fires *from* `register`), so the frontend
-      reports the new vault address via `POST /portfolios`; call `register` from that
-      handler, then save the off-chain `PortfolioMeta` mirror in the same handler.
-      ref: `../../contract/src/registry.rs:28` (on-chain registry); `src/portfolio/portfolio.service.ts:65` (off-chain `POST /portfolios` handler)
+- [~] Add `chain.register(owner, vault)` — a permissionless, no-funds call — and wire it into
+      the `POST /portfolios` handler.
+      DONE (method): `chain.register(owner, vault)` is implemented (registry `register` entry point;
+      `owner` = `Key::Account`, `vault` = `Key::Hash`), routed through `call()` and unit-tested.
+      There is **no chain event to observe a vault deploy** (`init` emits nothing; `VaultRegistered`
+      only fires *from* `register`), so the frontend reports the new vault via `POST /portfolios`.
+      STILL TODO — **(b) wire `chain.register` into `POST /portfolios`**: call it from the handler
+      using the vault address the frontend reports, then save the off-chain `PortfolioMeta` mirror in
+      the same handler. `register` is idempotent → make it resilient (log + still mirror on failure,
+      so the runner/operator having pre-registered doesn't break the API). No agent-key fund path.
+      ref: `src/chain/chain.service.ts` (`register`); `src/portfolio/portfolio.service.ts:65` (handler)
       done: a created vault is on-chain, in the registry, and mirrored in Postgres; `GET /portfolios?owner=` lists it
       🔴 golden rule #4 (deploying/registering a vault is fine; never put the agent key on a withdraw/fund-moving path)
 
@@ -98,8 +115,15 @@ subscription anywhere** in `src/`. Without it, deposits never get invested.
 
 ### P0 · ChainService: demo writes (`setPrice` + `faucetMint`) + PriceLog
 Demo controls must keep working (demo-readiness rule).
-- [ ] Implement `setPrice(token, priceUsd6)` and `faucetMint(owner, amountUsd6)`.
-      ref: `src/chain/chain.service.ts:48,63`
+- [x] Implement `setPrice(token, priceUsd6)` and `faucetMint(owner, amountUsd6)`.
+      DONE: `setPrice` → oracle `set_price(token, price)`; `faucetMint` → `mUSDC.faucet_mint(amount)`.
+      Both routed through `call()`; routing unit-tested; live validation rides on task (a).
+      ⚠️ FINDING: the contract `faucet_mint` mints to the CALLER (the signing key), NOT to `owner` —
+      there is no recipient arg. So `faucetMint` funds the BACKEND account; to fund a USER's wallet
+      for a deposit, the user signs `faucet_mint` in the frontend. `owner` is kept for the API shape
+      only (logged as a warning). Revisit if the demo needs server-funded user wallets (would need a
+      mint-then-transfer, or a frontend-signed faucet).
+      ref: `src/chain/chain.service.ts` (`setPrice`/`faucetMint`)
 - [ ] Persist a `PriceLog` on every write with the correct `source`
       (`keeper` for the loop, `manual_override` for the demo endpoint).
       ref: `src/keeper/keeper.service.ts:47,131`; `prisma/schema.prisma` (`PriceLog`, `PriceSource`)
