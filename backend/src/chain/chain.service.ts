@@ -10,6 +10,7 @@ import {
   ParamDictionaryIdentifier,
   ParamDictionaryIdentifierContractNamedKey,
   PrivateKey,
+  PublicKey,
   RpcClient,
 } from 'casper-js-sdk';
 import { ASSET_SYMBOLS, type AssetSymbol } from '../config/constants';
@@ -98,6 +99,19 @@ export function isValueNotFound(err: unknown): boolean {
 }
 
 /**
+ * Build an account `Address` Key from the `owner` the frontend reports — either an
+ * already-formatted `account-hash-…`/`hash-…` string, or a raw public-key hex (the
+ * wallet identifier). The vault's on-chain `owner` is the account hash of the
+ * user's key, so a bare public key is converted to match.
+ */
+export function accountKey(owner: string): Key {
+  if (owner.startsWith('account-hash-') || owner.startsWith('hash-')) {
+    return Key.newKey(owner);
+  }
+  return Key.newKey(PublicKey.fromHex(owner).accountHash().toPrefixedString());
+}
+
+/**
  * The ONLY module that talks to Casper (golden rule #2). It reads vault/oracle
  * state and holds the AGENT HOT KEY for the writes (`execute_buy` / `rebalance`
  * on a vault; plus `set_price` / `register` / `faucet_mint`).
@@ -107,9 +121,11 @@ export function isValueNotFound(err: unknown): boolean {
  * dictionary). There is NO off-chain entry-point call on Casper 2.0, so the
  * glide target is recomputed from stored fields (see `glide.ts`).
  *
- * 🔴 The agent key may ONLY trigger `execute_buy` / `rebalance` (enforced
- * on-chain). NEVER construct a withdraw or any fund-moving deploy with it
- * (golden rule #4). Never log or return the key (golden rule #8).
+ * 🔴 On a VAULT, the agent key may ONLY reach `execute_buy` / `rebalance`
+ * (enforced on-chain) — NEVER construct a withdraw or any fund-moving vault call
+ * with it (golden rule #4). The other writes here (`set_price`, `register`,
+ * `faucet_mint`) target the oracle/registry/token, not a vault, and move no vault
+ * funds. Never log or return the key (golden rule #8).
  */
 @Injectable()
 export class ChainService {
@@ -274,7 +290,7 @@ export class ChainService {
   register(owner: string, vault: string): Promise<string> {
     const registry = requireValue(this.cfg.registryHash, 'VAULT_REGISTRY_HASH');
     const args = Args.fromMap({
-      owner: CLValue.newCLKey(Key.newKey(owner)),
+      owner: CLValue.newCLKey(accountKey(owner)),
       vault: CLValue.newCLKey(Key.newKey(vault)),
     });
     return this.call(registry, 'register', args, WRITE_GAS_MOTES);

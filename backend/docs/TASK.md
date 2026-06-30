@@ -93,18 +93,18 @@ consistently across layers; today only the off-chain metadata mirror exists.
       The user becomes deployer + `owner`; the backend calls the permissionless,
       fund-free `register` (NOT the agent key) using the vault address the frontend
       reports. `chain.deployVault` is the documented FALLBACK only, not the accepted path.
-- [~] Add `chain.register(owner, vault)` — a permissionless, no-funds call — and wire it into
+- [x] Add `chain.register(owner, vault)` — a permissionless, no-funds call — and wire it into
       the `POST /portfolios` handler.
-      DONE (method): `chain.register(owner, vault)` is implemented (registry `register` entry point;
-      `owner` = `Key::Account`, `vault` = `Key::Hash`), routed through `call()` and unit-tested.
-      There is **no chain event to observe a vault deploy** (`init` emits nothing; `VaultRegistered`
-      only fires *from* `register`), so the frontend reports the new vault via `POST /portfolios`.
-      STILL TODO — **(b) wire `chain.register` into `POST /portfolios`**: call it from the handler
-      using the vault address the frontend reports, then save the off-chain `PortfolioMeta` mirror in
-      the same handler. `register` is idempotent → make it resilient (log + still mirror on failure,
-      so the runner/operator having pre-registered doesn't break the API). No agent-key fund path.
-      ref: `src/chain/chain.service.ts` (`register`); `src/portfolio/portfolio.service.ts:65` (handler)
-      done: a created vault is on-chain, in the registry, and mirrored in Postgres; `GET /portfolios?owner=` lists it
+      DONE: `chain.register` (registry `register`; `owner` = `Key::Account`, `vault` = `Key::Hash`)
+      is live-validated on testnet (tx `d9ab3557…`). **(b)** `PortfolioService.register` now calls it
+      from the `POST /portfolios` handler, then saves the `PortfolioMeta` mirror. Best-effort: register
+      is idempotent and the UI reads the mirror + live chain state, so a transient failure (key/network)
+      is logged and the mirror is still written (operator can re-register) — covered by
+      `portfolio.service.spec.ts` ("still mirrors if the on-chain register fails"). The `owner` the
+      frontend reports is normalized to the vault's account-hash `Address` (`accountKey()` accepts an
+      `account-hash-…` string OR a raw public-key hex). No agent-key fund path.
+      ref: `src/chain/chain.service.ts` (`register`/`accountKey`); `src/portfolio/portfolio.service.ts` (handler)
+      done: a created vault is registered on-chain + mirrored in Postgres; `GET /portfolios?owner=` lists it ✓
       🔴 golden rule #4 (deploying/registering a vault is fine; never put the agent key on a withdraw/fund-moving path)
 
 ### P0 · Deposit → buy event flow (currently MISSING — no listener exists)

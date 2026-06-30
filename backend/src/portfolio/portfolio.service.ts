@@ -61,11 +61,22 @@ export class PortfolioService {
     private readonly agent: AgentService,
   ) {}
 
-  /** Record the off-chain mirror after a user-signed `create_vault`. */
+  /** Record a vault after a user-signed `create_vault`: register it on-chain in
+   *  the permissionless registry, then save the off-chain mirror (ADR 0001). */
   async register(dto: RegisterPortfolioDto): Promise<PortfolioMetaDto> {
     if (!isValidAllocation(dto.baseAllocation)) {
       throw new BadRequestException(
         'baseAllocation must sum to 10000 bps across known assets',
+      );
+    }
+    // On-chain register is permissionless + idempotent and the UI reads the
+    // mirror + live chain state — so a transient failure (key/network) must NOT
+    // block the API. Best-effort: log and still mirror; an operator can re-register.
+    try {
+      await this.chain.register(dto.owner, dto.vaultHash);
+    } catch (err) {
+      this.logger.warn(
+        `on-chain register failed for ${dto.vaultHash}; mirroring anyway: ${(err as Error).message}`,
       );
     }
     const user = await this.prisma.user.upsert({
