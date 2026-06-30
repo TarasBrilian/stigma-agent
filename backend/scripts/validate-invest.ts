@@ -37,7 +37,9 @@ async function main(): Promise<void> {
   console.log(`idle after  : ${after} (${Number(after) / 1e6} mUSDC)`);
 
   const ok = before >= 1_000_000n && result.invested && after === 0n;
-  console.log(ok ? '\n✔ deposit→buy executed: idle invested to 0' : '\n✗ unexpected');
+  console.log(
+    ok ? '\n✔ deposit→buy executed: idle invested to 0' : '\n✗ unexpected',
+  );
   if (!ok) process.exit(1);
 }
 

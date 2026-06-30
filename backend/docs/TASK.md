@@ -180,10 +180,18 @@ Demo controls must keep working (demo-readiness rule).
       only (logged as a warning). Revisit if the demo needs server-funded user wallets (would need a
       mint-then-transfer, or a frontend-signed faucet).
       ref: `src/chain/chain.service.ts` (`setPrice`/`faucetMint`)
-- [ ] Persist a `PriceLog` on every write with the correct `source`
+- [x] Persist a `PriceLog` on every write with the correct `source`
       (`keeper` for the loop, `manual_override` for the demo endpoint).
-      ref: `src/keeper/keeper.service.ts:47,131`; `prisma/schema.prisma` (`PriceLog`, `PriceSource`)
-      done: `POST /keeper/oracle/override` writes a `manual_override` row; the cron writes `keeper` rows
+      DONE: a shared `logPrice(token, priceUsd6, source)` helper writes a `PriceLog` row after
+      each successful `chain.setPrice`. `feedOracle` (cron) logs `source: keeper` per token it
+      pushes; `setOracleOverride` (`POST /keeper/oracle/override`) logs `source: manual_override`.
+      The raw 6-dp price is stored as a USD-dollar `Decimal` via `money.usd6ToDecimal` (DB
+      convention). NOTE: the enum value is `manual_override` (underscore), per `schema.prisma` —
+      the old `manual-override` comment was misleading and is removed. No schema change → no new
+      migration. Covered by `keeper.service.spec.ts` (cron writes 5 `keeper` rows; override writes
+      one `manual_override` row, asserting the dollar-Decimal conversion 65_000_000_000 → "65000").
+      ref: `src/keeper/keeper.service.ts` (`logPrice`/`feedOracle`/`setOracleOverride`); `prisma/schema.prisma` (`PriceLog`, `PriceSource`)
+      done: `POST /keeper/oracle/override` writes a `manual_override` row; the cron writes `keeper` rows ✓
 
 ### P0 · Fix the contract-hash env drift (factory → registry) — ✅ DONE
 The contract deploys a `VaultRegistry`, but the backend env still names a factory.

@@ -11,7 +11,7 @@ import {
   KEEPER,
   type AssetSymbol,
 } from '../config/constants';
-import { valueUsd6, weightsBps } from '../config/money';
+import { usd6ToDecimal, valueUsd6, weightsBps } from '../config/money';
 
 interface RebalanceDecision {
   due: boolean;
@@ -49,7 +49,9 @@ export class KeeperService {
       const prices = await this.pricing.fetchPrices();
       for (const token of ASSET_SYMBOLS) {
         const price = prices[token];
-        if (price !== undefined) await this.chain.setPrice(token, price);
+        if (price === undefined) continue;
+        await this.chain.setPrice(token, price);
+        await this.logPrice(token, price, 'keeper');
       }
       this.logger.log('Oracle price feed complete (source=keeper)');
     } catch (err) {
@@ -183,8 +185,8 @@ export class KeeperService {
     token: AssetSymbol,
     priceUsd6: bigint,
   ): Promise<void> {
-    // Logged with source=manual-override by the chain/price layer.
     await this.chain.setPrice(token, priceUsd6);
+    await this.logPrice(token, priceUsd6, 'manual_override');
   }
 
   async faucet(owner: string, amountUsd6: bigint): Promise<void> {
@@ -232,6 +234,21 @@ export class KeeperService {
   }
 
   /* ------------------------------ helpers --------------------------------- */
+
+  /**
+   * Persist a price write to the audit trail. `source` is `keeper` for the cron
+   * loop and `manual_override` for the demo override endpoint. The raw 6-dp
+   * oracle price is stored as a USD-dollar Decimal (the DB convention).
+   */
+  private async logPrice(
+    token: AssetSymbol,
+    priceUsd6: bigint,
+    source: 'keeper' | 'manual_override',
+  ): Promise<void> {
+    await this.prisma.priceLog.create({
+      data: { token, price: usd6ToDecimal(priceUsd6.toString()), source },
+    });
+  }
 
   private async lastRebalanceAt(vaultHash: string): Promise<Date | null> {
     const last = await this.prisma.rebalanceLog.findFirst({

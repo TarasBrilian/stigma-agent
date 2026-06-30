@@ -124,6 +124,65 @@ describe('KeeperService.investIdle (deposit→buy)', () => {
   });
 });
 
+describe('KeeperService price logging (PriceLog audit trail)', () => {
+  type PriceLogCreate = {
+    data: { token: string; price: { toString(): string }; source: string };
+  };
+  const makeWithPrisma = (
+    create: jest.Mock<Promise<unknown>, [PriceLogCreate]>,
+    setPrice: jest.Mock,
+    pricing?: PricingService,
+  ): KeeperService =>
+    new KeeperService(
+      { priceLog: { create } } as unknown as PrismaService,
+      { setPrice } as unknown as ChainService,
+      pricing as unknown as PricingService,
+      undefined as unknown as BillingService,
+      undefined as unknown as AgentService,
+    );
+
+  it('feedOracle writes a `keeper` PriceLog per token it pushes', async () => {
+    const create = jest
+      .fn<Promise<unknown>, [PriceLogCreate]>()
+      .mockResolvedValue({});
+    const setPrice = jest.fn().mockResolvedValue('tx');
+    const pricing = {
+      fetchPrices: jest.fn().mockResolvedValue(prices),
+    } as unknown as PricingService;
+
+    await makeWithPrisma(create, setPrice, pricing).feedOracle();
+
+    // One setPrice + one PriceLog per asset.
+    expect(setPrice).toHaveBeenCalledTimes(5);
+    expect(create).toHaveBeenCalledTimes(5);
+    const btc = create.mock.calls.find((c) => c[0].data.token === 'mBTC')![0];
+    expect(btc.data.source).toBe('keeper');
+    // Raw 6-dp 65_000_000_000 -> $65000 dollar Decimal.
+    expect(btc.data.price.toString()).toBe('65000');
+  });
+
+  it('setOracleOverride writes a `manual_override` PriceLog', async () => {
+    const create = jest
+      .fn<Promise<unknown>, [PriceLogCreate]>()
+      .mockResolvedValue({});
+    const setPrice = jest.fn().mockResolvedValue('tx');
+
+    await makeWithPrisma(create, setPrice).setOracleOverride(
+      'mBTC',
+      70_000_000_000n,
+    );
+
+    expect(setPrice).toHaveBeenCalledWith('mBTC', 70_000_000_000n);
+    expect(create).toHaveBeenCalledTimes(1);
+    const logged = create.mock.calls[0][0];
+    expect(logged.data).toMatchObject({
+      token: 'mBTC',
+      source: 'manual_override',
+    });
+    expect(logged.data.price.toString()).toBe('70000');
+  });
+});
+
 // Proves the agent-resilience fix UNBLOCKS the keeper: a forced rebalance now
 // completes and persists a RebalanceLog with the deterministic rationale even
 // with no OPENROUTER_API_KEY (the rebalance side of the loop, sans Postgres).

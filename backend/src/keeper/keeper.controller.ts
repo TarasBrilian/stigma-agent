@@ -11,7 +11,7 @@ import { FaucetDto } from './dto/faucet.dto';
 export class KeeperController {
   constructor(private readonly keeper: KeeperService) {}
 
-  /** Manually set a mock price (logged source=manual-override). */
+  /** Manually set a mock price (logged source=manual_override). */
   @Post('keeper/oracle/override')
   async override(@Body() dto: OracleOverrideDto): Promise<{ ok: true }> {
     await this.keeper.setOracleOverride(dto.token, BigInt(dto.price));
