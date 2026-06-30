@@ -74,7 +74,7 @@ cargo odra test -b casper    # run against a Casper backend (slower, closer to r
 ## Deploy (testnet)
 
 ```bash
-# deploy order: tokens -> oracle -> router -> vault factory
+# shared infra order: tokens -> oracle -> router -> registry (NO factory — see ADR 0001)
 ./scripts/deploy.sh casper-test
 ```
 
@@ -86,6 +86,29 @@ After deploying, **export the contract hashes** and propagate them to the other 
 `./scripts/deploy.sh` builds the WASM and prints the ordered deploy + wiring +
 hash-export plan; submit the deploys with `casper-client` (or an Odra livenet
 runner) and a funded key, then record the hashes above.
+
+### Deploy one vault (per user)
+
+Each `Vault` is its own deploy (there is no factory). The livenet runner
+`bin/deploy_vault.rs` deploys a `Vault` with its `init` args and then calls the
+permissionless `VaultRegistry.register(owner, vault)`. It is both the runbook for
+the ADR-0001 user-signed deploy (identical init args/order) and the way to deploy
+a test vault manually:
+
+```bash
+set -a && . ./.env && set +a          # loads ODRA_CASPER_LIVENET_* (node, chain, key)
+cargo run --bin deploy_vault --features livenet
+# add VAULT_SMOKE=1 to also faucet -> approve -> deposit -> execute_buy and
+# prove the on-chain wiring executes a swap without reverting.
+```
+
+The infra hashes (oracle, router, registry, 5 tokens) are read from
+`deployed.casper-test.json` automatically; only the livenet credentials come from
+`.env`.
+
+Override the defaults via env: `VAULT_OWNER`, `VAULT_AGENT`, `VAULT_PROFILE`,
+`VAULT_BASE_ALLOCATION` (5 bps, Σ=10000), `VAULT_TARGET_AMOUNT_USD`,
+`VAULT_TARGET_YEAR`, and the `*_GAS` knobs (see the file header).
 
 ## Key numbers (must match the other layers)
 

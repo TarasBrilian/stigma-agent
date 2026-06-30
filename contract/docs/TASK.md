@@ -40,13 +40,24 @@ hashes) and *observability* (events the backend can index).
 `scripts/deploy.sh` builds WASM and prints the plan for tokens/oracle/router/
 registry, but there is **no reproducible way to deploy a `Vault` per user and
 register it** — yet a vault must exist before any deposit/buy/rebalance.
-- [ ] Provide a vault-deploy runner (Odra livenet runner or a `casper-client`
+- [x] Provide a vault-deploy runner (Odra livenet runner or a `casper-client`
       script): deploy `Vault.wasm` with init args
       `(owner, agent, profile, base_allocation, target_amount_usd, target_year, oracle, router, assets[5])`,
       then call `VaultRegistry.register(owner, vault)`.
-      ref: `scripts/deploy.sh:51-55`; `src/registry.rs:28` (`register`); `src/vault.rs:107` (`init`)
+      DELIVERED: `bin/deploy_vault.rs` (Odra **livenet** runner, behind the `livenet`
+      Cargo feature so the wasm build/tests never pull the host RPC client). It reuses
+      the generated `VaultInitArgs`/HostRefs (no hand-encoded CLValues), reads the SAME
+      infra-hash names from `deployed.casper-test.json` (env override), deploys the `Vault`,
+      then calls the permissionless `VaultRegistry.register`. `cargo clippy`/`cargo fmt`
+      clean; `cargo odra test` green.
+      ✅ VERIFIED ON TESTNET (casper-test): vault
+      `hash-5e83185e1c3fc08d5d065f377c372c7df66de1f64ea9b213cc7f6ea39fa96a2e` is live
+      (deploy tx `a9de3d5c…`) and registered (tx `f3fef538…`); a gas-free `VAULT_READ`
+      view confirms `list_vaults(owner) == true`.
+      Run: `cargo run --bin deploy_vault --features livenet` (see file header / `README.md`).
+      ref: `bin/deploy_vault.rs`; `scripts/deploy.sh` (now points here); `src/registry.rs:28`; `src/vault.rs:107`
       🔴 golden rule #5 (init validates `Σ == 10000` + asset membership) · #2 (no agent-settable allocation)
-      done: a vault is live on testnet; `VaultRegistry.list_vaults(owner)` includes it; `view_state` returns
+      done: a vault is live on testnet; `VaultRegistry.list_vaults(owner)` includes it ✓
 - [x] Decide with frontend/backend **who** signs the vault deploy (user-signed module
       bytes vs backend-deployed). Document it next to the runner.
       DECIDED: **user-signed `Vault.wasm` module-bytes deploy** (user = deployer +
@@ -60,11 +71,19 @@ register it** — yet a vault must exist before any deposit/buy/rebalance.
 The deploy record claims each token's `set_minter(router)` ran and the oracle is
 seeded, but nothing has exercised a real swap on testnet. `execute_buy` /
 `rebalance` / `withdraw` all revert if minting isn't wired.
-- [ ] Run a smoke swap on testnet (router burns input, mints output) and a vault
+- [x] Run a smoke swap on testnet (router burns input, mints output) and a vault
       `execute_buy` against a faucet-funded owner.
-      ref: `deployed.casper-test.json` (wiring claim); `src/router.rs:45` (`swap`); `src/token.rs:79` (`set_minter`)
+      DELIVERED: the runner's `VAULT_SMOKE=1` step does this end to end — `faucet_mint`
+      → `approve` → `deposit` → `execute_buy` driven by the single deployer key
+      (owner==agent==deployer guard), exiting non-zero if any leg reverts.
+      ✅ VERIFIED ON TESTNET: deposited $10,000 mUSDC; `execute_buy` (tx `501edd3f…`)
+      swapped it into the 4 assets at the EXACT Moderate target — a gas-free `VAULT_READ`
+      shows holdings mUSDC 0 · mBTC 30769 ($2k=20%) · mNVDAx 30000000 ($3k=30%) · mXAUT
+      2000000 ($4k=40%) · mGOOGLx 6666666 ($1k=10%), total $10k conserved. This proves
+      `set_minter(router)` is wired and the oracle is seeded.
+      ref: `bin/deploy_vault.rs` (`smoke`/`verify`); `src/router.rs:45` (`swap`); `src/token.rs:79` (`set_minter`)
       🔴 CLAUDE.md Gotcha (mint authority lives ONLY in the Router + `mUSDC.faucet_mint` — don't grant it elsewhere)
-      done: a testnet swap succeeds; `execute_buy` deploys idle `mUSDC` into assets without reverting
+      done: a testnet swap succeeds; `execute_buy` deploys idle `mUSDC` into assets without reverting ✓
 
 ### P0 · Export & propagate hashes (and kill the factory/registry drift)
 The contract correctly produces `VAULT_REGISTRY_HASH`, but downstream still names

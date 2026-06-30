@@ -26,7 +26,7 @@ ls -1 wasm/*.wasm 2>/dev/null || true
 cat <<'PLAN'
 
 ============================================================
-DEPLOY ORDER (network: tokens -> oracle -> router -> registry -> vaults)
+DEPLOY ORDER (network: tokens -> oracle -> router -> registry; vaults via runner)
 ============================================================
 
 Canonical asset order (index matters — shared with backend/frontend):
@@ -48,11 +48,18 @@ Canonical asset order (index matters — shared with backend/frontend):
 6. Seed prices: PriceOracle.set_price(<token>, <usd_6dp>) for each token
    (mUSDC = 1_000_000). The backend keeper then keeps them fresh.
 
-Vaults are deployed per user (init: owner, agent, profile, base_allocation,
-target_amount_usd, target_year, oracle, router, assets[5]) and recorded via
-VaultRegistry.register(owner, vault). (See registry.rs — the factory "deploys"
-in ARCHITECTURE.md become per-vault deploys, since Casper has no on-chain
-contract-creates-contract primitive.)
+Vaults are NOT deployed here — they are per-user (one Vault each) and there is no
+factory (Casper has no contract-creates-contract primitive; see registry.rs and
+ADR 0001). Deploy + register one with the dedicated runner, which submits the
+Vault.wasm module-bytes deploy with the init args and then calls
+VaultRegistry.register(owner, vault):
+
+    set -a && . ./.env && set +a                        # livenet creds; infra hashes
+    cargo run --bin deploy_vault --features livenet     # come from deployed.casper-test.json
+    #                                                     add VAULT_SMOKE=1 to also test a swap
+
+That runner is the runbook for the ADR-0001 user-signed deploy (identical init
+args/order) and for manual operator testing. See bin/deploy_vault.rs.
 
 ============================================================
 EXPORT HASHES (propagate downstream — see contract/CLAUDE.md "Hash propagation")

@@ -6,6 +6,16 @@ version = "0.1.0"
 [dependencies]
 odra = { version = "2.8.2", features = [], default-features = false }
 odra-modules = { version = "2.8.2", features = [], default-features = false }
+# Host-only deps for the per-vault deploy runner (bin/deploy_vault.rs). Optional +
+# feature-gated so `cargo odra build` (wasm) and `cargo odra test` never pull
+# them; enable explicitly with `--features livenet`. serde_json lets the runner
+# read infra hashes straight from `deployed.casper-test.json` (no env duplication).
+odra-casper-livenet-env = { version = "2.8.2", optional = true }
+serde_json = { version = "1", optional = true }
+
+[features]
+# Turns on the host-side livenet deploy runner. Off by default.
+livenet = ["dep:odra-casper-livenet-env", "dep:serde_json"]
 
 [dev-dependencies]
 odra-test = { version = "2.8.2", features = [], default-features = false }
@@ -24,6 +34,14 @@ test = false
 [[bin]]
 name = "stigma_contracts_build_schema"
 path = "bin/build_schema.rs"
+test = false
+
+# Per-vault livenet deploy runner (host-only; needs a funded testnet key).
+# Built only with `--features livenet`, so it is invisible to the wasm build.
+[[bin]]
+name = "deploy_vault"
+path = "bin/deploy_vault.rs"
+required-features = ["livenet"]
 test = false
 
 [profile.release]
