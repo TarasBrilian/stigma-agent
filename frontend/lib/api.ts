@@ -10,9 +10,11 @@
 
 import { env } from "./constants";
 import type {
+  Allocation,
   ChatMessage,
   OnboardingResult,
   OnboardingSubmission,
+  PortfolioMeta,
   PortfolioState,
   PortfolioSummary,
   Profile,
@@ -68,6 +70,21 @@ export const api = {
 
   getPortfolio: (vaultHash: string) =>
     request<PortfolioState>(`/portfolios/${encodeURIComponent(vaultHash)}`),
+
+  /**
+   * Record the off-chain mirror after a user-signed `create_vault` (ADR 0001). The
+   * backend performs the on-chain `VaultRegistry.register` AND saves the mirror; the
+   * UI never signs register itself.
+   */
+  register: (payload: {
+    vaultHash: string;
+    owner: string; // wallet public key hex
+    name: string;
+    profile: Profile;
+    baseAllocation: Allocation;
+    targetAmountUsd: Usd6;
+    targetYear: number;
+  }) => request<PortfolioMeta>("/portfolios", { method: "POST", json: payload }),
 
   generateStarters: (profile: Profile) =>
     request<StarterPortfolio[]>("/portfolios/starter", {

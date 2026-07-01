@@ -16,7 +16,7 @@
  */
 
 import type { Deploy, Transaction } from "casper-js-sdk";
-import { env } from "./constants";
+import { ASSET_SYMBOLS, env } from "./constants";
 import type { CasperWalletProviderInstance } from "./casper-wallet";
 import type { Allocation, Profile, Usd6 } from "./types";
 
@@ -80,10 +80,39 @@ export function subscribeWalletEvents(handler: () => void): () => void {
  */
 const APPROVE_GAS_MOTES = 5_000_000_000; // 5 CSPR
 const DEPOSIT_GAS_MOTES = 15_000_000_000; // 15 CSPR
+// Installing Vault.wasm as module bytes is a heavy session deploy — budget like the
+// contract's own deploy runner (default 600 CSPR) to avoid an out-of-gas revert.
+const CREATE_VAULT_GAS_MOTES = 600_000_000_000; // 600 CSPR
+
+/** `#[odra::odra_type]` unit-enum tag for `Profile` (declaration order), encoded as U8. */
+const PROFILE_TAG: Record<Profile, number> = {
+  Conservative: 0,
+  Moderate: 1,
+  Aggressive: 2,
+};
 
 /** Strip a `hash-`/`contract-package-`/`contract-` prefix → bare package-hash hex. */
 function packageHashHex(hash: string): string {
   return hash.replace(/^(hash-|contract-package-|contract-)/, "");
+}
+
+/**
+ * Encode a contract/vault package hash as a `CLKey` (`Key::Hash`) — the identity a
+ * CEP-18 token / an Odra `Address` uses for a contract. Async because the SDK is
+ * dynamically imported (cached after first use). Shared by the approve + create-vault
+ * builders so the encoding lives in ONE place.
+ */
+async function packageKeyCL(hash: string) {
+  const { CLValue, Key } = await import("casper-js-sdk");
+  return CLValue.newCLKey(Key.newKey(`hash-${packageHashHex(hash)}`));
+}
+
+/** Encode an account public-key hex as a `CLKey` (`Key::Account`) — an Odra `Address`. */
+async function accountKeyCL(publicKeyHex: string) {
+  const { CLValue, Key, PublicKey } = await import("casper-js-sdk");
+  return CLValue.newCLKey(
+    Key.newKey(PublicKey.fromHex(publicKeyHex).accountHash().toPrefixedString()),
+  );
 }
 
 /**
@@ -106,17 +135,90 @@ export interface CreateVaultArgs {
   targetYear: number;
 }
 
-export function buildCreateVaultDeploy(
-  _publicKeyHex: string,
-  _args: CreateVaultArgs,
-): Deploy {
-  // TODO (ADR 0001): build a MODULE-BYTES (session WASM) deploy of Vault.wasm —
-  // there is no VaultFactory. Pass Vault::init args as CLValues: owner =
-  // _publicKeyHex, agent = env.agentPublicKey, profile, base_allocation,
-  // target_amount_usd, target_year, oracle = env.oracleHash, router =
-  // env.routerHash, assets = [env.tokenHashes.mUSDC, …all 5]. The backend (not
-  // the UI) calls VaultRegistry.register after the deploy is reported.
-  throw new Error("buildCreateVaultDeploy: not implemented yet");
+export interface BuiltVaultDeploy {
+  transaction: Transaction;
+  /**
+   * The deployer-account named key under which the new vault's package hash lands.
+   * Pass it to `resolveVaultHash` after the deploy finalizes to learn the address.
+   */
+  packageHashKeyName: string;
+}
+
+/** Fetch the compiled `Vault.wasm` (shipped as a public static asset) for the deploy. */
+export async function fetchVaultWasm(): Promise<Uint8Array> {
+  const res = await fetch("/Vault.wasm");
+  if (!res.ok) throw new Error(`Failed to load Vault.wasm (${res.status}).`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+/**
+ * Build the user-signed MODULE-BYTES (session WASM) deploy that installs a `Vault`
+ * with the caller as deployer + `owner` (ADR 0001 — there is no VaultFactory; each
+ * vault is its own contract). The backend calls `VaultRegistry.register` afterward;
+ * the UI does NOT sign register.
+ *
+ * The runtime args are the vault `init(...)` args PLUS Odra's install control args
+ * (`odra_cfg_*`) that its WASM `call()` reads (Odra 2.8.2). Encodings: `Profile` is
+ * a unit enum → a U8 tag; `Address`es are Casper `Key`s — accounts (owner/agent) as
+ * `Key::Account`, contracts (oracle/router/assets) as `Key::Hash`; `base_allocation`
+ * and `assets` are in the canonical asset order [mUSDC…mGOOGLx].
+ * 🔴 golden rule #1 (USER action only) · #2 (allocation is validated on-chain; the UI
+ * only orders/encodes the bps it was handed — it does not compute the target).
+ */
+export async function buildCreateVaultDeploy(
+  publicKeyHex: string,
+  args: CreateVaultArgs,
+): Promise<BuiltVaultDeploy> {
+  assertRawUsd(args.targetAmountUsd, "buildCreateVaultDeploy.targetAmountUsd");
+  const { agentPublicKey, oracleHash, routerHash, tokenHashes } = env;
+  if (!agentPublicKey) throw new Error("NEXT_PUBLIC_AGENT_PUBLIC_KEY is not set.");
+  if (!oracleHash) throw new Error("NEXT_PUBLIC_ORACLE_HASH is not set.");
+  if (!routerHash) throw new Error("NEXT_PUBLIC_ROUTER_HASH is not set.");
+  const assetHashes = ASSET_SYMBOLS.map((s) => {
+    const h = tokenHashes[s];
+    if (!h) throw new Error(`Missing token hash for ${s} (NEXT_PUBLIC_TOKEN_*_HASH).`);
+    return h;
+  });
+
+  const wasm = await fetchVaultWasm();
+  const { Args, CLValue, CLTypeUInt32, CLTypeKey, PublicKey, SessionBuilder } =
+    await import("casper-js-sdk");
+
+  // Unique per deploy so a user can create several vaults without key-override.
+  const packageHashKeyName = `stigma_vault_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+
+  const runtimeArgs = Args.fromMap({
+    owner: await accountKeyCL(publicKeyHex),
+    agent: await accountKeyCL(agentPublicKey),
+    profile: CLValue.newCLUint8(PROFILE_TAG[args.profile]),
+    base_allocation: CLValue.newCLList(
+      CLTypeUInt32,
+      ASSET_SYMBOLS.map((s) => CLValue.newCLUInt32(args.baseAllocation[s] ?? 0)),
+    ),
+    target_amount_usd: CLValue.newCLUInt256(args.targetAmountUsd),
+    target_year: CLValue.newCLUInt32(args.targetYear),
+    oracle: await packageKeyCL(oracleHash),
+    router: await packageKeyCL(routerHash),
+    assets: CLValue.newCLList(CLTypeKey, await Promise.all(assetHashes.map(packageKeyCL))),
+    // Odra install control args read by the WASM `call()` (odra-core 2.8.2 consts).
+    odra_cfg_package_hash_key_name: CLValue.newCLString(packageHashKeyName),
+    odra_cfg_allow_key_override: CLValue.newCLValueBool(false),
+    odra_cfg_is_upgradable: CLValue.newCLValueBool(false),
+    odra_cfg_is_upgrade: CLValue.newCLValueBool(false),
+  });
+
+  const transaction = new SessionBuilder()
+    .from(PublicKey.fromHex(publicKeyHex))
+    .wasm(wasm)
+    .installOrUpgrade()
+    .runtimeArgs(runtimeArgs)
+    .chainName(env.network)
+    .payment(CREATE_VAULT_GAS_MOTES)
+    .build();
+
+  return { transaction, packageHashKeyName };
 }
 
 /**
@@ -137,11 +239,11 @@ export async function buildApproveDeploy(
   const musdc = env.tokenHashes.mUSDC;
   if (!musdc) throw new Error("NEXT_PUBLIC_TOKEN_MUSDC_HASH is not set.");
 
-  const { Args, CLValue, ContractCallBuilder, Key, PublicKey } = await import(
+  const { Args, CLValue, ContractCallBuilder, PublicKey } = await import(
     "casper-js-sdk"
   );
   const args = Args.fromMap({
-    spender: CLValue.newCLKey(Key.newKey(`hash-${packageHashHex(vaultHash)}`)),
+    spender: await packageKeyCL(vaultHash),
     amount: CLValue.newCLUInt256(amount),
   });
   return new ContractCallBuilder()
@@ -300,4 +402,35 @@ export async function confirmTransaction(
   const info = await rpc.waitForTransaction(tx, timeoutMs);
   const revert = info?.executionInfo?.executionResult?.errorMessage;
   if (revert) throw new Error(`Transaction reverted on-chain: ${revert}`);
+}
+
+/**
+ * After a create-vault deploy finalizes, read the new vault's package hash from the
+ * deployer's account named keys — Odra stores it under `packageHashKeyName`. Returns
+ * the `hash-…` string to report to the backend's `register`. This is one-shot deploy
+ * plumbing (learning the address the user just created), NOT a portfolio-value read —
+ * those still go through the backend.
+ */
+export async function resolveVaultHash(
+  publicKeyHex: string,
+  packageHashKeyName: string,
+): Promise<string> {
+  const rpc = await rpcClient();
+  const { EntityIdentifier, PublicKey } = await import("casper-js-sdk");
+  const res = await rpc.getLatestEntity(
+    EntityIdentifier.fromPublicKey(PublicKey.fromHex(publicKeyHex)),
+  );
+  // Casper 2.0 stores the deployer's named keys under the addressable entity;
+  // pre-migration accounts still expose them under `legacyAccount`. Check both.
+  const namedKeys =
+    res.entity.addressableEntity?.namedKeys ??
+    res.entity.legacyAccount?.namedKeys ??
+    [];
+  const named = namedKeys.find((k) => k.name === packageHashKeyName);
+  if (!named) {
+    throw new Error(
+      `Vault deployed, but its address key "${packageHashKeyName}" is not on the account yet — retry the register in a moment.`,
+    );
+  }
+  return named.key.toPrefixedString();
 }
