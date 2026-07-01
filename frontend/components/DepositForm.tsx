@@ -23,7 +23,8 @@ import {
   signTransactionWithWallet,
   submitTransaction,
 } from "@/lib/casper";
-import { parseUsdToRaw, truncateHash } from "@/lib/format";
+import { parseUsdToRaw } from "@/lib/format";
+import { TxLink } from "@/components/TxLink";
 import { useWallet } from "@/hooks/use-wallet";
 
 type Status =
@@ -145,8 +146,8 @@ export function DepositForm({ vaultHash }: { vaultHash: string }) {
             <p className="text-xs text-gold-deep">{STATUS_LABEL[status]}</p>
           )}
           {status === "pending" && txHash && (
-            <p className="font-mono text-xs text-ink-faint">
-              tx: {truncateHash(txHash)}
+            <p className="text-xs text-ink-faint">
+              <TxLink hash={txHash} />
             </p>
           )}
           {error && <p className="text-xs text-terracotta">{error}</p>}

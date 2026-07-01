@@ -9,7 +9,8 @@
 
 import { useState } from "react";
 import { buildWithdrawDeploy } from "@/lib/casper";
-import { parseUsdToRaw, truncateHash } from "@/lib/format";
+import { parseUsdToRaw } from "@/lib/format";
+import { TxLink } from "@/components/TxLink";
 import { useWallet } from "@/hooks/use-wallet";
 import { useSignedAction } from "@/hooks/use-signed-action";
 import type { Usd6 } from "@/lib/types";
@@ -78,7 +79,9 @@ export function WithdrawForm({ vaultHash }: { vaultHash: string }) {
           <p className="text-xs text-gold-deep">Confirming on-chain (~8s)…</p>
         )}
         {status === "done" && txHash && (
-          <p className="font-mono text-xs text-ink-faint">tx: {truncateHash(txHash)}</p>
+          <p className="text-xs text-ink-faint">
+            <TxLink hash={txHash} />
+          </p>
         )}
         {error && <p className="text-xs text-terracotta">{error}</p>}
       </div>

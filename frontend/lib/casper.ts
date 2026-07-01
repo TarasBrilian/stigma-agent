@@ -84,6 +84,7 @@ export function subscribeWalletEvents(handler: () => void): () => void {
  * the demo. (The backend uses ~10 CSPR for its single writes.)
  */
 const APPROVE_GAS_MOTES = 5_000_000_000; // 5 CSPR
+const FAUCET_GAS_MOTES = 5_000_000_000; // 5 CSPR (single CEP-18 mint to the caller)
 const DEPOSIT_GAS_MOTES = 15_000_000_000; // 15 CSPR
 // `withdraw` liquidates ALL holdings (up to 4 router swaps) then transfers — budget
 // well above a single write. `update_config` is just a validated state write.
@@ -299,6 +300,29 @@ export async function buildDepositDeploy(
   const { Args, CLValue } = await import("casper-js-sdk");
   const args = Args.fromMap({ amount: CLValue.newCLUInt256(amount) });
   return contractCall(publicKeyHex, vaultHash, "deposit", args, DEPOSIT_GAS_MOTES);
+}
+
+/** Fixed faucet claim size: 1,000 mUSDC (raw 6-dp). Only mUSDC is faucet-mintable. */
+export const FAUCET_MUSDC_RAW: Usd6 = "1000000000";
+
+/**
+ * `mUSDC.faucet_mint(amount)`: mint test mUSDC to the CALLER (the connected
+ * wallet), so the user can fund a deposit. Only mUSDC has the faucet enabled
+ * on-chain — the asset tokens revert with FaucetDisabled and are instead minted
+ * by the vault's router when the user deposits.
+ * 🔴 golden rule #1: a USER action (self-mint) — never an agent action.
+ */
+export async function buildFaucetMintDeploy(
+  publicKeyHex: string,
+  amount: Usd6,
+): Promise<Transaction> {
+  assertRawUsd(amount, "buildFaucetMintDeploy");
+  const musdc = env.tokenHashes.mUSDC;
+  if (!musdc) throw new Error("NEXT_PUBLIC_TOKEN_MUSDC_HASH is not set.");
+
+  const { Args, CLValue } = await import("casper-js-sdk");
+  const args = Args.fromMap({ amount: CLValue.newCLUInt256(amount) });
+  return contractCall(publicKeyHex, musdc, "faucet_mint", args, FAUCET_GAS_MOTES);
 }
 
 /**

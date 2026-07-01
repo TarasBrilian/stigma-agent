@@ -57,6 +57,12 @@ export default function RootLayout({
                 >
                   Onboarding
                 </Link>
+                <Link
+                  href="/faucet"
+                  className="text-[0.72rem] uppercase tracking-[0.14em] text-ink-soft transition-colors hover:text-gold"
+                >
+                  Faucet
+                </Link>
                 <WalletButton />
               </nav>
             </div>

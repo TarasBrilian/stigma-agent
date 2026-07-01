@@ -68,3 +68,17 @@ export const env = {
     mGOOGLx: process.env.NEXT_PUBLIC_TOKEN_MGOOGLX_HASH ?? "",
   } as Record<AssetSymbol, string>,
 } as const;
+
+/**
+ * cspr.live explorer URL for a submitted transaction hash. NOTE: cspr.live indexes
+ * Casper 2.0 TransactionV1 hashes under the `/deploy/` path (its `/deploys/` API
+ * returns them; `/transactions/` 404s) — verified live against testnet. Testnet vs
+ * mainnet is chosen from the configured network.
+ */
+export function explorerTxUrl(txHash: string): string {
+  const base =
+    env.network === "casper-test"
+      ? "https://testnet.cspr.live"
+      : "https://cspr.live";
+  return `${base}/deploy/${txHash}`;
+}
