@@ -34,6 +34,10 @@ export default function RootLayout({
       className={`${cinzel.variable} ${spectral.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        {/* Scroll-reveal starts hidden via inline style + JS; if JS is off, force visible. */}
+        <noscript>
+          <style>{`[data-reveal]{opacity:1!important;transform:none!important;filter:none!important}`}</style>
+        </noscript>
         <Providers>
           <header className="border-b border-line/70 bg-panel/50 backdrop-blur-sm">
             <TempleFret className="block text-gold/55" height={10} />

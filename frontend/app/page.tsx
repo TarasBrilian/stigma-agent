@@ -1,28 +1,90 @@
 import Link from "next/link";
 import Image from "next/image";
-import { TempleFret } from "@/components/ornaments";
+import { TempleFret, Lozenge } from "@/components/ornaments";
+import { Reveal } from "@/components/Reveal";
+import {
+  GlidePathFigure,
+  SecurityBoundary,
+  ArchitectureStack,
+  ComparisonTable,
+} from "@/components/landing";
 
-const STEPS = [
+/* ── At-a-glance credibility strip ──────────────────────────────── */
+const HIGHLIGHTS = [
+  { k: "Non-custodial", v: "you hold the keys" },
+  { k: "On-chain glide-path", v: "auto de-risks to goal" },
+  { k: "LLM never trades", v: "advice & rationale only" },
+  { k: "Autonomous", v: "runs on keeper loops" },
+];
+
+/* ── The end-to-end flow ────────────────────────────────────────── */
+const FLOW = [
   {
     n: "I",
+    actor: "You",
+    tone: "gold",
     title: "Set your goal",
-    body: "Answer a few questions. The agent assigns a risk profile and a starter allocation you can review and edit.",
+    body: "Answer a few questions. The agent assigns a risk profile and a starter allocation you can review and edit — before a single coin is committed.",
   },
   {
     n: "II",
-    title: "The agent invests",
-    body: "It funds a glide-path portfolio and rebalances on drift — every amount derived on-chain, never by the LLM.",
+    actor: "You",
+    tone: "gold",
+    title: "Create your vault",
+    body: "Sign the vault deploy in your wallet and become its sole owner. No factory, no middleman — the vault is yours on Casper.",
   },
   {
     n: "III",
+    actor: "You",
+    tone: "gold",
+    title: "Fund it",
+    body: "Deposit mUSDC. It's escrowed in your vault — a deposit alone never triggers a trade, so nothing moves until you're ready.",
+  },
+  {
+    n: "IV",
+    actor: "Agent",
+    tone: "patina",
+    title: "The agent invests",
+    body: "On your deposit, the agent triggers the buy. The vault derives every swap amount from your on-chain balance and target — the agent supplies none of the numbers.",
+  },
+  {
+    n: "V",
+    actor: "Agent",
+    tone: "patina",
+    title: "Rebalance on drift",
+    body: "Keeper loops watch prices. When your mix drifts past its band, the agent triggers a rebalance and the contract swaps back to the exact target — with the reasoning logged in plain language.",
+  },
+  {
+    n: "VI",
+    actor: "You",
+    tone: "gold",
     title: "You keep custody",
-    body: "The agent can only buy and rebalance. It can never withdraw your funds — that is enforced by the vault.",
+    body: "Withdraw anytime. Only you can move funds out of the vault — the agent has no path to your money, and never will.",
   },
 ];
 
+function SectionHeader({
+  eyebrow,
+  title,
+  children,
+}: {
+  eyebrow?: string;
+  title: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Reveal className="flex flex-col items-center gap-3 text-center">
+      <TempleFret className="w-36 text-gold/50" height={10} />
+      {eyebrow && <span className="section-title">{eyebrow}</span>}
+      <h2 className="carved-title text-2xl sm:text-3xl">{title}</h2>
+      {children && <p className="max-w-xl text-sm leading-relaxed text-ink-soft">{children}</p>}
+    </Reveal>
+  );
+}
+
 export default function Home() {
   return (
-    <div className="flex flex-col gap-16 pb-4 sm:gap-24">
+    <div className="flex flex-col gap-20 pb-4 sm:gap-28">
       {/* ── Hero (text left · enshrined relief right) ─────────── */}
       <section className="hero-stage relative overflow-hidden px-5 py-10 sm:px-8 sm:py-12">
         <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-12">
@@ -72,7 +134,7 @@ export default function Home() {
 
           {/* right column — meditating Buddha, enshrined in a lit niche */}
           <figure className="rise" style={{ animationDelay: "0.34s" }}>
-            <div className="relic-niche">
+            <div className="relic-niche float-slow">
               <Image
                 src="/image.png"
                 alt="Stone relief of the Buddha seated in meditation, surrounded by attendant figures"
@@ -85,35 +147,175 @@ export default function Home() {
             </div>
           </figure>
         </div>
+
+        {/* at-a-glance strip */}
+        <ul className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {HIGHLIGHTS.map((h, i) => (
+            <Reveal
+              as="li"
+              key={h.k}
+              delay={i * 90}
+              className="relief-inset flex flex-col gap-0.5 px-4 py-3"
+            >
+              <span className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                <Lozenge className="h-2 w-2 text-gold" />
+                {h.k}
+              </span>
+              <span className="pl-3.5 text-xs text-ink-faint">{h.v}</span>
+            </Reveal>
+          ))}
+        </ul>
       </section>
 
-      {/* ── How it works ─────────────────────────────────────── */}
+      {/* ── How it works — the full flow ─────────────────────── */}
       <section className="flex flex-col items-center gap-10">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <TempleFret className="w-36 text-gold/50" height={10} />
-          <h2 className="carved-title text-2xl sm:text-3xl">How it works</h2>
-          <p className="max-w-md text-sm text-ink-soft">
-            Three steps from a goal to an agent-run portfolio — with money math
-            kept deterministic and on-chain.
-          </p>
-        </div>
+        <SectionHeader eyebrow="How it works" title="From a goal to an agent-run portfolio">
+          Six steps, split cleanly between what you sign and what the agent
+          triggers — with every amount kept deterministic and on-chain.
+        </SectionHeader>
 
-        <ol className="grid w-full gap-5 sm:grid-cols-3">
-          {STEPS.map((s) => (
-            <li key={s.n} className="relief-panel flex flex-col items-center p-6 text-center">
-              <span className="chip chip-gold carved-title flex h-11 w-11 items-center justify-center rounded-full text-sm">
-                {s.n}
-              </span>
+        <ol className="grid w-full gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {FLOW.map((s, i) => (
+            <Reveal
+              as="li"
+              key={s.n}
+              delay={(i % 3) * 110}
+              className="relief-panel hover-relief flex flex-col p-6"
+            >
+              <div className="flex items-center justify-between">
+                <span className="chip chip-gold carved-title flex h-11 w-11 items-center justify-center rounded-full text-sm">
+                  {s.n}
+                </span>
+                <span className={`chip chip-${s.tone} px-2.5 py-0.5 text-[11px]`}>{s.actor}</span>
+              </div>
               <h3 className="carved-title mt-4 text-lg">{s.title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-ink-soft">{s.body}</p>
-            </li>
+            </Reveal>
           ))}
         </ol>
-
-        <Link href="/onboarding" className="btn-gold px-6 py-3 text-sm">
-          Begin onboarding
-        </Link>
       </section>
+
+      {/* ── Glide-path explainer ─────────────────────────────── */}
+      <section className="grid items-center gap-10 lg:grid-cols-2 lg:gap-12">
+        <Reveal className="flex flex-col items-start gap-4">
+          <span className="section-title">The glide-path</span>
+          <h2 className="carved-title text-2xl sm:text-3xl">
+            It de-risks as your goal nears.
+          </h2>
+          <p className="max-w-md text-sm leading-relaxed text-ink-soft">
+            Early on, your portfolio tilts toward growth — Bitcoin and tokenized
+            equities. As the target year approaches, the on-chain target
+            automatically shifts toward gold and a stablecoin, locking in your
+            progress.
+          </p>
+          <p className="max-w-md text-sm leading-relaxed text-ink-soft">
+            You never rebalance by hand, and you never trust a spreadsheet: the
+            curve below is <span className="text-ink">computed inside the contract</span>,
+            the same math the agent must obey.
+          </p>
+          <span className="chip chip-stone px-3 py-1 text-xs">
+            Computed on-chain · Moderate profile shown
+          </span>
+        </Reveal>
+        <Reveal delay={140}>
+          <GlidePathFigure />
+        </Reveal>
+      </section>
+
+      {/* ── Security / trust model ───────────────────────────── */}
+      <section className="flex flex-col items-center gap-10">
+        <SectionHeader eyebrow="The trust model" title="It invests for you. It can never withdraw.">
+          Two keys act on your vault — yours and the agent&apos;s. The split is
+          enforced by the contract, not by a promise. The worst a leaked agent
+          key could do is trigger a harmless extra rebalance.
+        </SectionHeader>
+
+        <div className="w-full">
+          <SecurityBoundary />
+        </div>
+
+        <Reveal className="flex flex-wrap items-center justify-center gap-3">
+          {["Non-custodial by design", "Deterministic money math", "Every swap is slippage-capped"].map(
+            (t) => (
+              <span key={t} className="chip chip-patina px-3 py-1 text-xs">
+                {t}
+              </span>
+            ),
+          )}
+        </Reveal>
+      </section>
+
+      {/* ── Architecture ─────────────────────────────────────── */}
+      <section className="flex flex-col items-center gap-10">
+        <SectionHeader eyebrow="Under the hood" title="Three layers, one hard boundary">
+          A wallet-signing frontend, an advising-and-triggering backend, and
+          Casper contracts that hold the funds and do the math. The LLM only
+          advises; every executed number is computed on-chain.
+        </SectionHeader>
+
+        <div className="w-full max-w-3xl">
+          <ArchitectureStack />
+        </div>
+      </section>
+
+      {/* ── Competitor comparison ────────────────────────────── */}
+      <section className="flex flex-col items-center gap-10">
+        <SectionHeader eyebrow="How it compares" title="Familiar idea, safer foundation">
+          Goal-based investing isn&apos;t new. Doing it without handing over
+          custody — and without letting a language model move your money — is.
+        </SectionHeader>
+
+        <Reveal className="w-full">
+          <ComparisonTable />
+        </Reveal>
+      </section>
+
+      {/* ── x402 / machine economy ───────────────────────────── */}
+      <Reveal
+        as="section"
+        className="tablet flex flex-col items-center gap-5 px-6 py-10 text-center sm:px-10"
+      >
+        <span className="section-title">Machine economy</span>
+        <h2 className="carved-title max-w-2xl text-2xl sm:text-3xl">
+          An autonomous service that pays its own way.
+        </h2>
+        <p className="max-w-xl text-sm leading-relaxed text-ink-soft">
+          Stigma isn&apos;t a dashboard you operate — it runs itself. And like any
+          real service, it charges for the work it does: each rebalance pulls a
+          tiny fee via <span className="text-ink">x402</span>, Casper&apos;s
+          pay-per-call standard. A glimpse of software that acts, and settles, on
+          its own.
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {["~0.1% per rebalance", "paid in mUSDC", "settled on-chain"].map((t) => (
+            <span key={t} className="chip chip-gold px-3 py-1 text-xs">
+              {t}
+            </span>
+          ))}
+        </div>
+      </Reveal>
+
+      {/* ── Final CTA ────────────────────────────────────────── */}
+      <Reveal as="section" className="flex flex-col items-center gap-6 text-center">
+        <TempleFret className="w-36 text-gold/50" height={10} />
+        <h2 className="carved-title max-w-xl text-2xl sm:text-3xl">
+          Set a goal. Let the agent do the rest.
+        </h2>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Link href="/onboarding" className="btn-gold group px-6 py-3 text-sm">
+            Begin onboarding
+            <span aria-hidden className="transition-transform duration-200 group-hover:translate-x-1">
+              →
+            </span>
+          </Link>
+          <Link href="/dashboard" className="btn-outline px-6 py-3 text-sm">
+            View dashboard
+          </Link>
+        </div>
+        <p className="text-xs tracking-wide text-ink-faint">
+          Testnet only · all tradable assets are mocked.
+        </p>
+      </Reveal>
     </div>
   );
 }

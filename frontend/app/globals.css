@@ -458,6 +458,15 @@ body::before {
     transform: rotate(360deg);
   }
 }
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
 
 .rise {
   animation: rise 0.75s cubic-bezier(0.2, 0.7, 0.2, 1) both;
@@ -466,9 +475,24 @@ body::before {
   animation: spin-slow 140s linear infinite;
 }
 
+/* gentle perpetual float — used sparingly (e.g. the enshrined relief) */
+@media (prefers-reduced-motion: no-preference) {
+  .float-slow {
+    animation: float-slow 7s ease-in-out infinite;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rise,
-  .spin-slow {
+  .spin-slow,
+  .float-slow {
     animation: none;
+  }
+  /* scroll-reveal elements render in place, no motion */
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
   }
 }
