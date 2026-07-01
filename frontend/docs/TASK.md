@@ -152,10 +152,26 @@ path from there to actually creating a vault.
 ## 2. Hardening & polish (P1 / P2)
 
 ### P1 · Withdraw & update-config builders + UI
-- [ ] Implement `buildWithdrawDeploy` and `buildUpdateConfigDeploy`, add their forms.
-      ref: `lib/casper.ts:98,107`  🔴 golden rule #1 (still user actions — never `execute_buy`/`rebalance`/`set_price`)
-      note: `withdraw(amount)` liquidates ALL holdings to `mUSDC` then sends `amount`; surface that a
-      partial withdraw moves the remainder to cash until the agent re-buys (set user expectation)
+- [x] Implement `buildWithdrawDeploy` and `buildUpdateConfigDeploy`, add their forms.
+      DONE (last two builder stubs — the module now has ZERO `throw "not implemented"` builders,
+      so the 6 stub lint-warnings are gone):
+      • `buildWithdrawDeploy(pk, vault, amountOrAll)` → `Vault.withdraw(amount)` (U256) or the no-arg
+        `withdraw_all()` when `"all"`; 30 CSPR gas (liquidates all holdings → transfer).
+      • `buildUpdateConfigDeploy(pk, vault, {allocation, targetAmountUsd, targetYear})` →
+        `update_config(base_allocation: List(U32), target_amount_usd: U256, target_year: U32)`.
+        The contract requires ALL THREE (re-validates Σ==10000 + membership), so the builder takes
+        the full config, not a partial patch; `base_allocation` in canonical order.
+      • `WithdrawForm` (right column): amount input + "Withdraw all", with the liquidation note. Signs
+        → submits → confirms → `router.refresh()`.
+      • `UpdateConfigForm` (full-width section): 5 editable bps inputs (pre-filled from
+        `state.baseAllocation`) with a live Σ/10000 gate, goal $ (pre-filled via new
+        `usd6ToPlain`) + year. Edits the BASE allocation only (golden rule #4 — never the derived target).
+      All three entry points smoke-built in node (args/hash OK). `Deploy` import dropped (all builders
+      now return `Transaction`). tsc + eslint (0 warnings) + `next build` clean.
+      ref: `lib/casper.ts` (`buildWithdrawDeploy`/`buildUpdateConfigDeploy`); `components/WithdrawForm.tsx`,
+      `components/UpdateConfigForm.tsx`; `app/portfolio/[vault]/page.tsx`; `lib/format.ts` (`usd6ToPlain`)
+      🔴 golden rule #1 (user actions only — never `execute_buy`/`rebalance`/`set_price`) · #2/#4
+      ⚠️ live E2E pends the real Casper Wallet (same sign-payload caveat as the other flows).
 
 ### P1 · Optimistic UI + reconcile
 - [ ] After any signed deploy, show pending and reconcile against backend reads rather than

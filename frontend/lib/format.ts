@@ -60,6 +60,19 @@ export function parseUsdToRaw(input: string): Usd6 {
   return raw.toString();
 }
 
+/**
+ * Raw 6-dp USD → a plain editable decimal string ("1234.5"), no `$`/grouping — for
+ * pre-filling an input (round-trips with `parseUsdToRaw`). Formatting only.
+ */
+export function usd6ToPlain(raw: Usd6 | bigint): string {
+  let v = typeof raw === "bigint" ? raw : BigInt(raw || "0");
+  const negative = v < 0n;
+  if (negative) v = -v;
+  const whole = v / USD_SCALE;
+  const frac = (v % USD_SCALE).toString().padStart(6, "0").replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${frac ? `.${frac}` : ""}`;
+}
+
 /** Convert bps (integer, Σ=10000) to a percent number for charts. 2000 -> 20. */
 export function bpsToPercent(bps: number): number {
   return bps / 100;

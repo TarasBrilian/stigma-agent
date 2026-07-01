@@ -15,7 +15,7 @@
  * Component.
  */
 
-import type { Deploy, Transaction } from "casper-js-sdk";
+import type { Args, Transaction } from "casper-js-sdk";
 import { ASSET_SYMBOLS, env } from "./constants";
 import type { CasperWalletProviderInstance } from "./casper-wallet";
 import type { Allocation, Profile, Usd6 } from "./types";
@@ -80,6 +80,10 @@ export function subscribeWalletEvents(handler: () => void): () => void {
  */
 const APPROVE_GAS_MOTES = 5_000_000_000; // 5 CSPR
 const DEPOSIT_GAS_MOTES = 15_000_000_000; // 15 CSPR
+// `withdraw` liquidates ALL holdings (up to 4 router swaps) then transfers — budget
+// well above a single write. `update_config` is just a validated state write.
+const WITHDRAW_GAS_MOTES = 30_000_000_000; // 30 CSPR
+const UPDATE_CONFIG_GAS_MOTES = 5_000_000_000; // 5 CSPR
 // Installing Vault.wasm as module bytes is a heavy session deploy — budget like the
 // contract's own deploy runner (default 600 CSPR) to avoid an out-of-gas revert.
 const CREATE_VAULT_GAS_MOTES = 600_000_000_000; // 600 CSPR
@@ -113,6 +117,30 @@ async function accountKeyCL(publicKeyHex: string) {
   return CLValue.newCLKey(
     Key.newKey(PublicKey.fromHex(publicKeyHex).accountHash().toPrefixedString()),
   );
+}
+
+/**
+ * Build an unsigned Casper 2.0 contract-call `Transaction` by package hash — the shared
+ * shape of every USER vault action (approve/deposit/withdraw/update_config). Mirrors the
+ * backend's proven `ContractCallBuilder` path; callers supply only the target package, entry
+ * point, args, and gas. Sign with `signTransactionWithWallet`, submit with `submitTransaction`.
+ */
+async function contractCall(
+  publicKeyHex: string,
+  packageHash: string,
+  entryPoint: string,
+  args: Args,
+  paymentMotes: number,
+): Promise<Transaction> {
+  const { ContractCallBuilder, PublicKey } = await import("casper-js-sdk");
+  return new ContractCallBuilder()
+    .from(PublicKey.fromHex(publicKeyHex))
+    .byPackageHash(packageHashHex(packageHash))
+    .entryPoint(entryPoint)
+    .runtimeArgs(args)
+    .chainName(env.network)
+    .payment(paymentMotes)
+    .build();
 }
 
 /**
@@ -239,21 +267,12 @@ export async function buildApproveDeploy(
   const musdc = env.tokenHashes.mUSDC;
   if (!musdc) throw new Error("NEXT_PUBLIC_TOKEN_MUSDC_HASH is not set.");
 
-  const { Args, CLValue, ContractCallBuilder, PublicKey } = await import(
-    "casper-js-sdk"
-  );
+  const { Args, CLValue } = await import("casper-js-sdk");
   const args = Args.fromMap({
     spender: await packageKeyCL(vaultHash),
     amount: CLValue.newCLUInt256(amount),
   });
-  return new ContractCallBuilder()
-    .from(PublicKey.fromHex(publicKeyHex))
-    .byPackageHash(packageHashHex(musdc))
-    .entryPoint("approve")
-    .runtimeArgs(args)
-    .chainName(env.network)
-    .payment(APPROVE_GAS_MOTES)
-    .build();
+  return contractCall(publicKeyHex, musdc, "approve", args, APPROVE_GAS_MOTES);
 }
 
 /**
@@ -272,36 +291,73 @@ export async function buildDepositDeploy(
   assertRawUsd(amount, "buildDepositDeploy");
   if (!vaultHash) throw new Error("buildDepositDeploy: vaultHash is required.");
 
-  const { Args, CLValue, ContractCallBuilder, PublicKey } = await import(
-    "casper-js-sdk"
-  );
+  const { Args, CLValue } = await import("casper-js-sdk");
   const args = Args.fromMap({ amount: CLValue.newCLUInt256(amount) });
-  return new ContractCallBuilder()
-    .from(PublicKey.fromHex(publicKeyHex))
-    .byPackageHash(packageHashHex(vaultHash))
-    .entryPoint("deposit")
-    .runtimeArgs(args)
-    .chainName(env.network)
-    .payment(DEPOSIT_GAS_MOTES)
-    .build();
+  return contractCall(publicKeyHex, vaultHash, "deposit", args, DEPOSIT_GAS_MOTES);
 }
 
-export function buildWithdrawDeploy(
-  _publicKeyHex: string,
-  _vaultHash: string,
-  _amountOrAll: Usd6 | "all",
-): Deploy {
-  // TODO: call Vault.withdraw(amount_or_all) — owner-only; sells to mUSDC.
-  throw new Error("buildWithdrawDeploy: not implemented yet");
+/**
+ * `Vault.withdraw(amount)` or `Vault.withdraw_all()` — owner-only. Pass `"all"` for the
+ * whole balance (no-arg entry point), else a raw 6-dp amount. NOTE: a partial withdraw
+ * liquidates ALL holdings to mUSDC, sends `amount`, and leaves the remainder as idle
+ * cash until the agent re-buys — surface that to the user before they sign.
+ * 🔴 golden rule #1: a USER action (owner-only on-chain) — never an agent action.
+ */
+export async function buildWithdrawDeploy(
+  publicKeyHex: string,
+  vaultHash: string,
+  amountOrAll: Usd6 | "all",
+): Promise<Transaction> {
+  if (!vaultHash) throw new Error("buildWithdrawDeploy: vaultHash is required.");
+  const isAll = amountOrAll === "all";
+  if (!isAll) assertRawUsd(amountOrAll, "buildWithdrawDeploy");
+
+  const { Args, CLValue } = await import("casper-js-sdk");
+  const args = isAll
+    ? Args.fromMap({})
+    : Args.fromMap({ amount: CLValue.newCLUInt256(amountOrAll) });
+  return contractCall(
+    publicKeyHex,
+    vaultHash,
+    isAll ? "withdraw_all" : "withdraw",
+    args,
+    WITHDRAW_GAS_MOTES,
+  );
 }
 
-export function buildUpdateConfigDeploy(
-  _publicKeyHex: string,
-  _vaultHash: string,
-  _patch: { allocation?: Allocation; targetAmountUsd?: Usd6; targetYear?: number },
-): Deploy {
-  // TODO: call Vault.update_config(...) — owner-only; re-validates Σ == 10000.
-  throw new Error("buildUpdateConfigDeploy: not implemented yet");
+/**
+ * `Vault.update_config(base_allocation, target_amount_usd, target_year)` — owner-only.
+ * The contract requires ALL THREE (it re-validates Σ == 10000 + asset membership on
+ * write), so the caller passes the full config, not a partial patch. This edits the
+ * growth-tilted START allocation (`base_allocation`) — NOT the glide-adjusted current
+ * target (golden rule #4: the UI never re-derives that). `base_allocation` is encoded
+ * in canonical asset order [mUSDC…mGOOGLx].
+ * 🔴 golden rule #1 (USER action) · #2 (allocation passed as bps, validated on-chain).
+ */
+export async function buildUpdateConfigDeploy(
+  publicKeyHex: string,
+  vaultHash: string,
+  config: { allocation: Allocation; targetAmountUsd: Usd6; targetYear: number },
+): Promise<Transaction> {
+  if (!vaultHash) throw new Error("buildUpdateConfigDeploy: vaultHash is required.");
+  assertRawUsd(config.targetAmountUsd, "buildUpdateConfigDeploy.targetAmountUsd");
+
+  const { Args, CLValue, CLTypeUInt32 } = await import("casper-js-sdk");
+  const args = Args.fromMap({
+    base_allocation: CLValue.newCLList(
+      CLTypeUInt32,
+      ASSET_SYMBOLS.map((s) => CLValue.newCLUInt32(config.allocation[s] ?? 0)),
+    ),
+    target_amount_usd: CLValue.newCLUInt256(config.targetAmountUsd),
+    target_year: CLValue.newCLUInt32(config.targetYear),
+  });
+  return contractCall(
+    publicKeyHex,
+    vaultHash,
+    "update_config",
+    args,
+    UPDATE_CONFIG_GAS_MOTES,
+  );
 }
 
 /* ----------------------------- sign & submit ------------------------------ */

@@ -6,6 +6,8 @@ import { ContributionCard } from "@/components/ContributionCard";
 import { ActivityList } from "@/components/ActivityList";
 import { AgentChat } from "@/components/AgentChat";
 import { DepositForm } from "@/components/DepositForm";
+import { WithdrawForm } from "@/components/WithdrawForm";
+import { UpdateConfigForm } from "@/components/UpdateConfigForm";
 import { DemoPanel } from "@/components/DemoPanel";
 import { ProfileBadge } from "@/components/ProfileBadge";
 
@@ -67,6 +69,7 @@ export default async function PortfolioPage({
 
         <div className="flex flex-col gap-6">
           <DepositForm vaultHash={state.vaultHash} />
+          <WithdrawForm vaultHash={state.vaultHash} />
           <section className="relief-panel p-5">
             <h2 className="section-title mb-4">Goal</h2>
             <GoalProgress
@@ -89,6 +92,13 @@ export default async function PortfolioPage({
           <AgentChat vaultHash={state.vaultHash} />
         </section>
       </div>
+
+      <UpdateConfigForm
+        vaultHash={state.vaultHash}
+        baseAllocation={state.baseAllocation}
+        targetAmountUsd={state.targetAmountUsd}
+        targetYear={state.targetYear}
+      />
 
       <DemoPanel vaultHash={state.vaultHash} />
     </div>
