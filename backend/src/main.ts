@@ -1,9 +1,18 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
+
+  // Large JSON bodies: a user-signed Vault deploy carries the ~313 KB Vault.wasm
+  // (hex-encoded → ~1 MB payload) when the browser submits it through the
+  // /casper-rpc relay — well over Express's 100 KB default.
+  app.useBodyParser('json', { limit: '15mb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '15mb' });
 
   // Allow the Next.js frontend to call the API. FRONTEND_ORIGIN="*" reflects any
   // origin (open — used for the testnet demo deploy where the frontend is on

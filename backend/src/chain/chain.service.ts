@@ -163,6 +163,30 @@ export class ChainService {
 
   /* ------------------------------ reads ------------------------------ */
 
+  /**
+   * Thin JSON-RPC passthrough to the Casper node. Lets the browser submit
+   * USER-signed transactions + read entity state through our own CORS-open,
+   * HTTPS backend — dodging the node's missing CORS headers and any edge-proxy
+   * body/timeout limits. Forwards the raw body verbatim and returns the node's
+   * JSON as-is; it NEVER signs or touches the agent key (golden rules #2/#4).
+   */
+  async relayRpc(body: unknown): Promise<unknown> {
+    const url = requireValue(this.cfg.nodeUrl, 'CASPER_NODE_URL');
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new Error(
+        `Casper node RPC error ${res.status}: ${text.slice(0, 200)}`,
+      );
+    }
+  }
+
   /** Current oracle prices per asset (raw USD, 6 dp). Reads `PriceOracle.prices`. */
   async getPrices(): Promise<Record<AssetSymbol, bigint>> {
     const oracle = requireValue(this.cfg.oracleHash, 'ORACLE_HASH');
