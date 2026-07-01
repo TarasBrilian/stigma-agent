@@ -37,7 +37,12 @@ export function getWalletProvider(): CasperWalletProviderInstance {
 export async function connectWallet(): Promise<string> {
   const provider = getWalletProvider();
   const connected = await provider.requestConnection();
-  if (!connected) throw new Error("Wallet connection was rejected.");
+  // An already-approved site can resolve `requestConnection()` to `false` while
+  // a live session still exists — only treat it as a rejection when there is
+  // genuinely no active connection (otherwise a reconnect shows a false error).
+  if (!connected && !(await provider.isConnected())) {
+    throw new Error("Wallet connection was rejected.");
+  }
   return provider.getActivePublicKey();
 }
 
@@ -433,7 +438,14 @@ export async function signTransactionWithWallet(
 async function rpcClient() {
   if (!env.nodeUrl) throw new Error("NEXT_PUBLIC_CASPER_NODE_URL is not set.");
   const { HttpHandler, RpcClient } = await import("casper-js-sdk");
-  return new RpcClient(new HttpHandler(env.nodeUrl));
+  // A relative node URL (e.g. "/casper-rpc") is the same-origin Next.js proxy to
+  // the Casper node (see next.config.ts) — resolve it to an absolute same-origin
+  // URL so HttpHandler/axios targets this app and dodges the node's missing CORS
+  // headers. An absolute URL (direct node) passes through unchanged.
+  const nodeUrl = env.nodeUrl.startsWith("/")
+    ? new URL(env.nodeUrl, window.location.origin).toString()
+    : env.nodeUrl;
+  return new RpcClient(new HttpHandler(nodeUrl));
 }
 
 /** Submit a signed transaction to the network; returns the transaction hash (hex). */
@@ -467,26 +479,33 @@ export async function confirmTransaction(
  * plumbing (learning the address the user just created), NOT a portfolio-value read —
  * those still go through the backend.
  */
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function resolveVaultHash(
   publicKeyHex: string,
   packageHashKeyName: string,
+  { attempts = 10, intervalMs = 3_000 }: { attempts?: number; intervalMs?: number } = {},
 ): Promise<string> {
   const rpc = await rpcClient();
   const { EntityIdentifier, PublicKey } = await import("casper-js-sdk");
-  const res = await rpc.getLatestEntity(
-    EntityIdentifier.fromPublicKey(PublicKey.fromHex(publicKeyHex)),
-  );
-  // Casper 2.0 stores the deployer's named keys under the addressable entity;
-  // pre-migration accounts still expose them under `legacyAccount`. Check both.
-  const namedKeys =
-    res.entity.addressableEntity?.namedKeys ??
-    res.entity.legacyAccount?.namedKeys ??
-    [];
-  const named = namedKeys.find((k) => k.name === packageHashKeyName);
-  if (!named) {
-    throw new Error(
-      `Vault deployed, but its address key "${packageHashKeyName}" is not on the account yet — retry the register in a moment.`,
-    );
+  const id = EntityIdentifier.fromPublicKey(PublicKey.fromHex(publicKeyHex));
+  // The package-hash named key can lag the deploy's finalization by a block or
+  // two (global state settles after `waitForTransaction` returns), so poll the
+  // account's named keys for ~30s instead of failing on the first miss.
+  // Casper 2.0 stores them under the addressable entity; pre-migration accounts
+  // expose them under `legacyAccount` — check both.
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const res = await rpc.getLatestEntity(id);
+    const namedKeys =
+      res.entity.addressableEntity?.namedKeys ??
+      res.entity.legacyAccount?.namedKeys ??
+      [];
+    const named = namedKeys.find((k) => k.name === packageHashKeyName);
+    if (named) return named.key.toPrefixedString();
+    if (attempt < attempts - 1) await sleep(intervalMs);
   }
-  return named.key.toPrefixedString();
+  throw new Error(
+    `Vault deployed, but its address key "${packageHashKeyName}" is not on the account yet — retry the register in a moment.`,
+  );
 }

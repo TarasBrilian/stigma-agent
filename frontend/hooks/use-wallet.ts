@@ -47,7 +47,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const sync = async () => {
       try {
         const pk = await getActivePublicKey();
-        if (active) setPublicKey(pk);
+        if (!active) return;
+        setPublicKey(pk);
+        // Connected ⇒ clear any stale connect error (e.g. approved directly in
+        // the extension after an earlier reject), so state stays consistent.
+        if (pk) setError(null);
       } catch {
         if (active) setPublicKey(null);
       }

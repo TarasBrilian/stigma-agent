@@ -65,8 +65,10 @@ export function QuestionnaireForm() {
       setCreating("Deploying on-chain (~8s)…");
       await confirmTransaction(signed);
 
-      setCreating("Registering your vault…");
+      setCreating("Waiting for the vault to finalize (~30s)…");
       const vaultHash = await resolveVaultHash(publicKey, packageHashKeyName);
+
+      setCreating("Registering your vault…");
       await api.register({
         vaultHash,
         owner: publicKey,
