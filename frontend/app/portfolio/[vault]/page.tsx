@@ -5,6 +5,7 @@ import { GoalProgress } from "@/components/GoalProgress";
 import { ContributionCard } from "@/components/ContributionCard";
 import { ActivityList } from "@/components/ActivityList";
 import { AgentChat } from "@/components/AgentChat";
+import { DepositForm } from "@/components/DepositForm";
 import { DemoPanel } from "@/components/DemoPanel";
 import { ProfileBadge } from "@/components/ProfileBadge";
 
@@ -65,6 +66,7 @@ export default async function PortfolioPage({
         </section>
 
         <div className="flex flex-col gap-6">
+          <DepositForm vaultHash={state.vaultHash} />
           <section className="relief-panel p-5">
             <h2 className="section-title mb-4">Goal</h2>
             <GoalProgress

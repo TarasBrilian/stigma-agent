@@ -268,13 +268,36 @@ export async function signTransactionWithWallet(
   return tx;
 }
 
+/**
+ * Lazily build an `RpcClient` against the public node. Dynamic import keeps
+ * casper-js-sdk out of the initial client bundle (only needed at submit time).
+ */
+async function rpcClient() {
+  if (!env.nodeUrl) throw new Error("NEXT_PUBLIC_CASPER_NODE_URL is not set.");
+  const { HttpHandler, RpcClient } = await import("casper-js-sdk");
+  return new RpcClient(new HttpHandler(env.nodeUrl));
+}
+
 /** Submit a signed transaction to the network; returns the transaction hash (hex). */
 export async function submitTransaction(tx: Transaction): Promise<string> {
-  if (!env.nodeUrl) throw new Error("NEXT_PUBLIC_CASPER_NODE_URL is not set.");
-  // Dynamic import keeps casper-js-sdk out of the initial client bundle; it is
-  // only needed at submit time.
-  const { HttpHandler, RpcClient } = await import("casper-js-sdk");
-  const rpc = new RpcClient(new HttpHandler(env.nodeUrl));
+  const rpc = await rpcClient();
   const result = await rpc.putTransaction(tx);
   return result.transactionHash.toHex();
+}
+
+/**
+ * Wait for a submitted transaction to finalize, surfacing an on-chain revert as a
+ * thrown error (mirrors the backend's proven write path). Needed to land `approve`
+ * before `deposit`: `Vault.deposit` runs `transfer_from`, which requires the
+ * allowance already finalized — submitting both back-to-back risks the deposit
+ * executing first (Casper gives no submission-order guarantee) and reverting.
+ */
+export async function confirmTransaction(
+  tx: Transaction,
+  timeoutMs = 90_000,
+): Promise<void> {
+  const rpc = await rpcClient();
+  const info = await rpc.waitForTransaction(tx, timeoutMs);
+  const revert = info?.executionInfo?.executionResult?.errorMessage;
+  if (revert) throw new Error(`Transaction reverted on-chain: ${revert}`);
 }

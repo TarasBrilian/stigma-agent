@@ -38,6 +38,28 @@ export function formatUsd(raw: Usd6 | bigint, opts?: { sign?: boolean }): string
   return `${prefix}$${grouped}.${centsStr}`;
 }
 
+/**
+ * Parse a human dollar amount ("100", "100.50", "0.25") into a raw fixed-point
+ * USD string (6 dp) — the exact inverse of `formatUsd`. This ENCODES the amount
+ * the user typed into the contract's integer unit; it is the counterpart of the
+ * display decode, NOT money math that decides a value (golden rule #2). BigInt-only
+ * (no float → no precision loss). Throws on non-numeric input or > 6 decimals.
+ * @example parseUsdToRaw("100.5") -> "100500000"
+ */
+export function parseUsdToRaw(input: string): Usd6 {
+  const match = /^(\d+)(?:\.(\d{1,6}))?$/.exec(input.trim());
+  if (!match) {
+    throw new Error(
+      "Enter a dollar amount with up to 6 decimal places (e.g. 100 or 100.50).",
+    );
+  }
+  const whole = BigInt(match[1]);
+  const frac = BigInt((match[2] ?? "").padEnd(6, "0")); // right-pad to 6 dp
+  const raw = whole * USD_SCALE + frac;
+  if (raw <= 0n) throw new Error("Amount must be greater than zero.");
+  return raw.toString();
+}
+
 /** Convert bps (integer, Σ=10000) to a percent number for charts. 2000 -> 20. */
 export function bpsToPercent(bps: number): number {
   return bps / 100;

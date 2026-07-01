@@ -50,9 +50,11 @@ then calls `registry.register` (the UI does not — see ADR 0001).
       `lib/casper.ts:83` was already replaced with the ADR-0001 plan (P0-2).
       ref: `lib/casper.ts:79` (`buildCreateVaultDeploy` — body still throws; env accessors ready)
       done: a documented decision; the builder matches it
-- [ ] Implement `buildDepositDeploy` (the demo entry point — fund an existing vault).
-      ref: `lib/casper.ts:89`  🔴 golden rule #1 (build USER actions only)
-      done: returns a valid unsigned `Deploy` calling `Vault.deposit(amount)` with CLValue args
+- [x] Implement `buildDepositDeploy` (the demo entry point — fund an existing vault).
+      DONE: builds an unsigned Casper 2.0 `Transaction` (TransactionV1) calling
+      `Vault.deposit(amount)` by package hash with a `U256` amount arg (mirrors the backend's
+      `ContractCallBuilder` path). Amount is validated raw 6-dp via `assertRawUsd`.
+      ref: `lib/casper.ts` (`buildDepositDeploy`)  🔴 golden rule #1 (USER action only)
 - [x] Fix the env to match ADR 0001. Under user-signed creation the UI does **not** need a
       registry hash (the backend calls `register`; reads go via backend) — so **remove**
       `NEXT_PUBLIC_VAULT_FACTORY_HASH` rather than renaming it. Add what `Vault::init` needs:
@@ -108,14 +110,28 @@ path from there to actually creating a vault.
 `Vault.deposit` calls `transfer_from(owner → vault)`, so the owner must FIRST
 **approve** the vault as a `mUSDC` spender (see the contract test: `approve` then
 `deposit`). The portfolio page has no deposit UI and there is no approve builder.
-- [ ] Add `buildApproveDeploy(mUSDC, vault, amount)` (CEP-18 `approve`) — missing from `lib/casper.ts`.
-      ref: `lib/casper.ts:89` (next to `buildDepositDeploy`); `../../contract/src/vault.rs:136` (`deposit` → `transfer_from`); `../../contract/src/tests.rs:126` (approve-then-deposit)
-      needs: the `mUSDC` token hash in env (see the env task)  🔴 golden rule #1 (user action)
-- [ ] Add a deposit form that signs **approve then deposit** (or checks allowance first),
-      shows pending, and reconciles via backend reads (~8s block time).
-      ref: `app/portfolio/[vault]/page.tsx:91` (only `DemoPanel` today)
-      🔴 golden rule #1 (user actions only) · #2 (format only, no value math)
+- [x] Add `buildApproveDeploy(mUSDC, vault, amount)` (CEP-18 `approve`) — missing from `lib/casper.ts`.
+      DONE: builds a `Transaction` calling mUSDC `approve(spender=vault as Key::Hash, amount)` by
+      package hash. `mUSDC` hash from `env.tokenHashes.mUSDC`; amount validated raw 6-dp.
+      ref: `lib/casper.ts` (`buildApproveDeploy`)  🔴 golden rule #1 (user action)
+- [x] Add a deposit form that signs **approve then deposit**, shows pending, and reconciles via
+      backend reads (~8s block time).
+      DONE: `components/DepositForm.tsx` (client) — connect-wallet gate, dollar input parsed to raw
+      6-dp via the new `parseUsdToRaw` (lib/format; ENCODING only, BigInt, no money math), then
+      `buildApproveDeploy → sign → submit → confirmTransaction(approve) → buildDepositDeploy →
+      sign → submit`. It WAITS for the approve to finalize before depositing (deposit runs
+      `transfer_from`; Casper gives no submission-order guarantee, so a back-to-back deposit could
+      revert) via the new `chain.confirmTransaction` (mirrors the backend's `waitForTransaction`
+      revert-surfacing). Step-by-step status ("1/2 approve…", "confirming…", "2/2 deposit…"),
+      shows the tx hash, then `router.refresh()` reconciles the server-rendered holdings (~1 block);
+      the keeper invests the idle mUSDC afterward. Errors (wallet reject, revert) surfaced inline.
+      Wired into the portfolio page's right column above Goal, visually separate from `DemoPanel`.
+      ref: `components/DepositForm.tsx`; `app/portfolio/[vault]/page.tsx`; `lib/format.ts`
+      (`parseUsdToRaw`); `lib/casper.ts` (`confirmTransaction`)
+      🔴 golden rule #1 (user actions only) · #2 (format/encode only, no value math)
       done: a user funds a vault from the portfolio page; holdings refresh after confirmation
+      ⚠️ live E2E (a real wallet-signed deposit landing on testnet) still pends the live Casper
+      Wallet extension confirming the `Transaction.toJSON()` sign payload — same caveat as sign/submit.
 
 ---
 
