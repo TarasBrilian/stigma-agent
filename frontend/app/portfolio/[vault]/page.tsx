@@ -58,7 +58,7 @@ export default async function PortfolioPage({
         <ProfileBadge profile={state.profile} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
         <section className="relief-panel p-5 lg:col-span-2">
           <h2 className="section-title mb-4">Allocation</h2>
           <AllocationChart
@@ -70,16 +70,19 @@ export default async function PortfolioPage({
         <div className="flex flex-col gap-6">
           <DepositForm vaultHash={state.vaultHash} />
           <WithdrawForm vaultHash={state.vaultHash} />
-          <section className="relief-panel p-5">
-            <h2 className="section-title mb-4">Goal</h2>
-            <GoalProgress
-              progressBps={state.progressBps}
-              currentValueUsd={state.totalValueUsd}
-              targetAmountUsd={state.targetAmountUsd}
-            />
-          </section>
-          {projection && <ContributionCard projection={projection} />}
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+        <section className="relief-panel p-5">
+          <h2 className="section-title mb-4">Goal</h2>
+          <GoalProgress
+            progressBps={state.progressBps}
+            currentValueUsd={state.totalValueUsd}
+            targetAmountUsd={state.targetAmountUsd}
+          />
+        </section>
+        {projection && <ContributionCard projection={projection} />}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

@@ -43,7 +43,7 @@ function Donut({ title, alloc }: { title: string; alloc: Allocation }) {
   );
 }
 
-/** Current vs glide-path target allocation, side by side. Display-only. */
+/** Current vs glide-path target allocation, with a per-asset breakdown. Display-only. */
 export function AllocationChart({
   current,
   target,
@@ -51,10 +51,43 @@ export function AllocationChart({
   current: Allocation;
   target: Allocation;
 }) {
+  const rows = ASSET_SYMBOLS.filter(
+    (s) => (current[s] ?? 0) > 0 || (target[s] ?? 0) > 0,
+  );
   return (
-    <div className="grid grid-cols-2 gap-4">
-      <Donut title="Current" alloc={current} />
-      <Donut title="Target (glide-path)" alloc={target} />
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-2 gap-4">
+        <Donut title="Current" alloc={current} />
+        <Donut title="Target (glide-path)" alloc={target} />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <div className="grid grid-cols-[1fr_5rem_5rem] gap-x-4 border-b border-line/60 pb-1.5 text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+          <span>Asset</span>
+          <span className="text-right">Current</span>
+          <span className="text-right">Target</span>
+        </div>
+        {rows.map((s) => (
+          <div
+            key={s}
+            className="grid grid-cols-[1fr_5rem_5rem] items-center gap-x-4 py-1 text-sm"
+          >
+            <span className="flex items-center gap-2 text-ink">
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ background: ASSETS[s].color }}
+              />
+              {ASSETS[s].label}
+            </span>
+            <span className="text-right font-mono text-ink-soft">
+              {bpsToPercent(current[s] ?? 0).toFixed(1)}%
+            </span>
+            <span className="text-right font-mono text-ink-soft">
+              {bpsToPercent(target[s] ?? 0).toFixed(1)}%
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
