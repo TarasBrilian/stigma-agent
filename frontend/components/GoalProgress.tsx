@@ -15,13 +15,16 @@ export function GoalProgress({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between text-sm">
-        <span className="font-medium">{formatUsd(currentValueUsd)}</span>
-        <span className="text-foreground/60">of {formatUsd(targetAmountUsd)}</span>
+        <span className="carved-title text-lg text-gold-deep">{formatUsd(currentValueUsd)}</span>
+        <span className="text-ink-soft">of {formatUsd(targetAmountUsd)}</span>
       </div>
-      <div className="h-2.5 w-full overflow-hidden rounded-full bg-foreground/10">
-        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
+      <div className="relief-inset h-3 w-full overflow-hidden rounded-full">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-gold-bright to-gold"
+          style={{ width: `${pct}%` }}
+        />
       </div>
-      <span className="text-xs text-foreground/60">{formatProgress(progressBps)} to goal</span>
+      <span className="text-xs text-ink-soft">{formatProgress(progressBps)} to goal</span>
     </div>
   );
 }

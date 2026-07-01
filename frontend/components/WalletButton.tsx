@@ -9,11 +9,11 @@ export function WalletButton() {
 
   return (
     <div className="flex items-center gap-2">
-      {error && <span className="text-xs text-red-500">{error}</span>}
+      {error && <span className="text-xs text-terracotta">{error}</span>}
       {isConnected ? (
         <button
           onClick={() => void disconnect()}
-          className="rounded-md border border-foreground/20 px-3 py-1.5 text-sm hover:bg-foreground/5"
+          className="btn-ghost px-3 py-1.5 font-mono text-sm"
           title={publicKey ?? undefined}
         >
           {truncateHash(publicKey ?? "")} · Disconnect
@@ -22,7 +22,7 @@ export function WalletButton() {
         <button
           onClick={() => void connect()}
           disabled={isConnecting}
-          className="rounded-md bg-foreground px-3 py-1.5 text-sm text-background disabled:opacity-50"
+          className="btn-gold px-3 py-1.5 text-sm"
         >
           {isConnecting ? "Connecting…" : "Connect Wallet"}
         </button>

@@ -17,7 +17,7 @@ function Donut({ title, alloc }: { title: string; alloc: Allocation }) {
   const data = toData(alloc);
   return (
     <div className="flex flex-col items-center">
-      <h4 className="mb-1 text-xs font-medium text-foreground/60">{title}</h4>
+      <h4 className="mb-1 text-[11px] uppercase tracking-[0.12em] text-ink-soft">{title}</h4>
       <ResponsiveContainer width="100%" height={200}>
         <PieChart>
           <Pie data={data} dataKey="value" nameKey="name" innerRadius={48} outerRadius={78} paddingAngle={2}>
@@ -25,7 +25,18 @@ function Donut({ title, alloc }: { title: string; alloc: Allocation }) {
               <Cell key={d.name} fill={d.color} />
             ))}
           </Pie>
-          <Tooltip formatter={(value) => `${Number(value).toFixed(1)}%`} />
+          <Tooltip
+            formatter={(value) => `${Number(value).toFixed(1)}%`}
+            contentStyle={{
+              background: "var(--panel)",
+              border: "1px solid var(--line)",
+              borderRadius: 8,
+              color: "var(--ink)",
+              fontSize: 12,
+              boxShadow: "0 8px 20px -12px rgba(43,35,23,0.5)",
+            }}
+            itemStyle={{ color: "var(--ink)" }}
+          />
         </PieChart>
       </ResponsiveContainer>
     </div>

@@ -12,30 +12,27 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Your portfolios</h1>
-        <Link
-          href="/onboarding"
-          className="rounded-md bg-foreground px-4 py-2 text-sm text-background"
-        >
+        <h1 className="carved-title text-2xl">Your portfolios</h1>
+        <Link href="/onboarding" className="btn-gold px-4 py-2 text-sm">
           New portfolio
         </Link>
       </div>
 
       {!isConnected && (
-        <p className="text-sm text-foreground/60">
+        <p className="text-sm text-ink-soft">
           Connect your wallet to see your portfolios.
         </p>
       )}
       {isConnected && isLoading && (
-        <p className="text-sm text-foreground/60">Loading…</p>
+        <p className="text-sm text-ink-soft">Loading…</p>
       )}
       {error && (
-        <p className="text-sm text-red-500">
+        <p className="text-sm text-terracotta">
           Couldn&apos;t load portfolios (is the backend running?).
         </p>
       )}
       {isConnected && data && data.length === 0 && (
-        <p className="text-sm text-foreground/60">
+        <p className="text-sm text-ink-soft">
           No portfolios yet. Start with onboarding.
         </p>
       )}

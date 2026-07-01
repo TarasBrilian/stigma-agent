@@ -49,10 +49,10 @@ export function QuestionnaireForm() {
   if (result) {
     return (
       <div className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Your profile</h2>
+        <h2 className="carved-title text-lg">Your profile</h2>
         <ProfileBadge profile={result.profile.profile} withBlurb />
-        <p className="text-sm text-foreground/70">{result.profile.reasoning}</p>
-        <p className="text-sm text-foreground/50">
+        <p className="text-sm leading-relaxed text-ink-soft">{result.profile.reasoning}</p>
+        <p className="text-sm text-ink-faint">
           {result.starters.length} starter portfolio(s) suggested — review and edit before creating.
         </p>
       </div>
@@ -62,29 +62,29 @@ export function QuestionnaireForm() {
   return (
     <div className="flex flex-col gap-4">
       {QUESTIONS.map((q) => (
-        <label key={q.id} className="flex flex-col gap-1 text-sm">
-          <span>{q.label}</span>
+        <label key={q.id} className="flex flex-col gap-1.5 text-sm">
+          <span className="text-ink-soft">{q.label}</span>
           <input
             value={answers[q.id] ?? ""}
             onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
-            className="rounded-md border border-foreground/15 bg-transparent px-3 py-1.5 outline-none"
+            className="field px-3 py-2 text-sm"
           />
         </label>
       ))}
-      <label className="flex flex-col gap-1 text-sm">
-        <span>Your age</span>
+      <label className="flex flex-col gap-1.5 text-sm">
+        <span className="text-ink-soft">Your age</span>
         <input
           value={age}
           onChange={(e) => setAge(e.target.value)}
           inputMode="numeric"
-          className="rounded-md border border-foreground/15 bg-transparent px-3 py-1.5 outline-none"
+          className="field px-3 py-2 text-sm"
         />
       </label>
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-terracotta">{error}</p>}
       <button
         onClick={submit}
         disabled={!isConnected || submitting}
-        className="rounded-md bg-foreground px-4 py-2 text-sm text-background disabled:opacity-50"
+        className="btn-gold mt-1 px-4 py-2.5 text-sm"
       >
         {!isConnected ? "Connect wallet to continue" : submitting ? "Submitting…" : "Get my profile"}
       </button>

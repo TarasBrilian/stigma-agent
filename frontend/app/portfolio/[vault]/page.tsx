@@ -35,29 +35,29 @@ export default async function PortfolioPage({
   if (!state) {
     return (
       <div className="flex flex-col gap-2">
-        <h1 className="text-xl font-semibold">Portfolio</h1>
-        <p className="text-sm text-foreground/60">
+        <h1 className="carved-title text-xl">Portfolio</h1>
+        <p className="text-sm text-ink-soft">
           Couldn&apos;t load this portfolio. Make sure the backend is running and
           the vault hash is correct.
         </p>
-        <p className="text-xs text-foreground/40">vault: {vault}</p>
+        <p className="font-mono text-xs text-ink-faint">vault: {vault}</p>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">{state.name}</h1>
-          <p className="text-xs text-foreground/40">{state.vaultHash}</p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="carved-title text-2xl">{state.name}</h1>
+          <p className="font-mono text-xs text-ink-faint">{state.vaultHash}</p>
         </div>
         <ProfileBadge profile={state.profile} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <section className="lg:col-span-2 rounded-lg border border-foreground/10 p-4">
-          <h2 className="mb-3 text-sm font-medium text-foreground/70">Allocation</h2>
+        <section className="relief-panel p-5 lg:col-span-2">
+          <h2 className="section-title mb-4">Allocation</h2>
           <AllocationChart
             current={state.currentAllocation}
             target={state.currentTargetAllocation}
@@ -65,8 +65,8 @@ export default async function PortfolioPage({
         </section>
 
         <div className="flex flex-col gap-6">
-          <section className="rounded-lg border border-foreground/10 p-4">
-            <h2 className="mb-3 text-sm font-medium text-foreground/70">Goal</h2>
+          <section className="relief-panel p-5">
+            <h2 className="section-title mb-4">Goal</h2>
             <GoalProgress
               progressBps={state.progressBps}
               currentValueUsd={state.totalValueUsd}
@@ -78,12 +78,12 @@ export default async function PortfolioPage({
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section>
-          <h2 className="mb-3 text-sm font-medium text-foreground/70">Activity</h2>
+        <section className="flex flex-col">
+          <h2 className="section-title mb-4">Activity</h2>
           <ActivityList entries={activity} />
         </section>
-        <section>
-          <h2 className="mb-3 text-sm font-medium text-foreground/70">Ask the agent</h2>
+        <section className="flex flex-col">
+          <h2 className="section-title mb-4">Ask the agent</h2>
           <AgentChat vaultHash={state.vaultHash} />
         </section>
       </div>

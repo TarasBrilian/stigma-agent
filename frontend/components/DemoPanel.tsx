@@ -29,14 +29,19 @@ export function DemoPanel({ vaultHash }: { vaultHash: string }) {
   };
 
   return (
-    <div className="rounded-lg border border-dashed border-amber-400/60 bg-amber-50/40 p-4">
-      <h3 className="text-sm font-semibold text-amber-700">Demo controls (testnet)</h3>
-      <div className="mt-3 flex flex-col gap-3 text-sm">
-        <div className="flex items-center gap-2">
+    <div className="tablet p-5">
+      <div className="flex items-center gap-2">
+        <h3 className="section-title">Demo controls</h3>
+        <span className="chip chip-stone px-2 py-0.5 text-[10px] uppercase tracking-wider">
+          testnet
+        </span>
+      </div>
+      <div className="mt-4 flex flex-col gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            className="rounded border border-foreground/15 bg-transparent px-2 py-1"
+            className="field px-2 py-1.5"
           >
             {ASSET_SYMBOLS.map((s) => (
               <option key={s} value={s}>
@@ -48,33 +53,33 @@ export function DemoPanel({ vaultHash }: { vaultHash: string }) {
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             placeholder="price (6dp raw)"
-            className="w-36 rounded border border-foreground/15 bg-transparent px-2 py-1"
+            className="field w-36 px-2 py-1.5"
           />
           <button
             disabled={busy !== null}
             onClick={() => run("price", () => api.demoSetPrice(token, price))}
-            className="rounded bg-amber-600 px-2 py-1 text-white disabled:opacity-50"
+            className="btn-stone px-3 py-1.5 text-sm"
           >
             Set price
           </button>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             disabled={busy !== null}
             onClick={() => run("rebalance", () => api.demoRebalanceNow(vaultHash))}
-            className="rounded bg-amber-600 px-2 py-1 text-white disabled:opacity-50"
+            className="btn-stone px-3 py-1.5 text-sm"
           >
             Rebalance now
           </button>
           <button
             disabled={busy !== null || !publicKey}
             onClick={() => run("faucet", () => api.demoFaucet(publicKey as string, "1000000000"))}
-            className="rounded bg-amber-600 px-2 py-1 text-white disabled:opacity-50"
+            className="btn-stone px-3 py-1.5 text-sm"
           >
             Faucet 1,000 mUSDC
           </button>
         </div>
-        {busy && <span className="text-xs text-amber-700">Running {busy}…</span>}
+        {busy && <span className="text-xs text-gold-deep">Running {busy}…</span>}
       </div>
     </div>
   );
