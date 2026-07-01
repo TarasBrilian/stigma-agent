@@ -1,7 +1,8 @@
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, HttpAdapterHost } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './all-exceptions.filter';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -22,6 +23,10 @@ async function bootstrap(): Promise<void> {
 
   // Validate + strip unknown fields on every DTO.
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+  // Never let a non-HTTP error (e.g. a Casper JSON-RPC code like -32016) become
+  // the HTTP status — return a clean 500 with the real message instead.
+  app.useGlobalFilters(new AllExceptionsFilter(app.get(HttpAdapterHost)));
 
   // Bind to localhost by default so the app stays PRIVATE behind the reverse
   // proxy (Caddy → 127.0.0.1:3001); the raw port is never exposed to the
