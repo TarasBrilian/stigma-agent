@@ -117,7 +117,8 @@ export class PortfolioService {
         const value = valueUsd6(state.holdings, prices);
         const target = BigInt(decimalToUsd6(meta.targetAmountUsd));
         return {
-          meta: this.toMetaDto(meta),
+          // createdYear surfaced from on-chain state; the DB is a mirror (#5).
+          meta: { ...this.toMetaDto(meta), createdYear: state.createdYear },
           totalValueUsd: value.toString(),
           progressBps: this.progressBps(value, target, true),
         };
@@ -136,6 +137,9 @@ export class PortfolioService {
     const target = BigInt(decimalToUsd6(meta.targetAmountUsd));
     return {
       ...this.toMetaDto(meta),
+      // 🔴 golden rule #5: created_year is on-chain truth (it drives the glide
+      // target); the DB column is only a mirror. Surface the live value.
+      createdYear: state.createdYear,
       holdings: state.holdings,
       currentAllocation: weightsBps(state.holdings, prices),
       currentTargetAllocation: state.currentTargetAllocation,

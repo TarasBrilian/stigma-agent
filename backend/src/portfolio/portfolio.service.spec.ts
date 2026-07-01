@@ -6,16 +6,44 @@ import { PricingService } from '../pricing/pricing.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { allocationSumBps, isValidAllocation } from '../config/money';
 
+// Shared fixtures — one definition reused across the describe blocks below.
+const OWNER_ROW = { id: 'u1', walletAddress: 'owner-pk' };
+const ALLOC = {
+  mUSDC: 0,
+  mBTC: 2000,
+  mNVDAx: 3000,
+  mXAUT: 4000,
+  mGOOGLx: 1000,
+};
+const META_ROW = {
+  vaultHash: 'hash-v',
+  name: 'My Goal',
+  profile: 'Moderate' as const,
+  baseAllocation: ALLOC,
+  targetAmountUsd: new Prisma.Decimal('1000'),
+  targetYear: 2040,
+  createdYear: 2026, // DB mirror
+  createdAt: new Date('2026-06-30T00:00:00Z'),
+  user: OWNER_ROW,
+};
+
+/** Build the service with only the collaborators a test needs (rest unused). */
+const makeService = (mocks: {
+  prisma?: unknown;
+  chain?: unknown;
+  pricing?: unknown;
+  agent?: unknown;
+}): PortfolioService =>
+  new PortfolioService(
+    mocks.prisma as PrismaService,
+    mocks.chain as ChainService,
+    mocks.pricing as PricingService,
+    mocks.agent as AgentService,
+  );
+
 describe('PortfolioService (no-chain paths)', () => {
   const agentMock = { suggestAllocation: jest.fn() };
-
-  const make = (): PortfolioService =>
-    new PortfolioService(
-      undefined as unknown as PrismaService,
-      undefined as unknown as ChainService,
-      undefined as unknown as PricingService,
-      agentMock as unknown as AgentService,
-    );
+  const make = (): PortfolioService => makeService({ agent: agentMock });
 
   beforeEach(() => agentMock.suggestAllocation.mockReset());
 
@@ -67,47 +95,18 @@ describe('PortfolioService (no-chain paths)', () => {
 
 describe('PortfolioService.register (chain wiring)', () => {
   const chainMock = { register: jest.fn() };
-  const userRow = { id: 'u1', walletAddress: 'owner-pk' };
-  const metaRow = {
-    vaultHash: 'hash-v',
-    name: 'My Goal',
-    profile: 'Moderate' as const,
-    baseAllocation: {
-      mUSDC: 0,
-      mBTC: 2000,
-      mNVDAx: 3000,
-      mXAUT: 4000,
-      mGOOGLx: 1000,
-    },
-    targetAmountUsd: new Prisma.Decimal('1000'),
-    targetYear: 2040,
-    createdYear: 2026,
-    createdAt: new Date('2026-06-30T00:00:00Z'),
-    user: userRow,
-  };
   const prismaMock = {
-    user: { upsert: jest.fn().mockResolvedValue(userRow) },
-    portfolioMeta: { create: jest.fn().mockResolvedValue(metaRow) },
+    user: { upsert: jest.fn().mockResolvedValue(OWNER_ROW) },
+    portfolioMeta: { create: jest.fn().mockResolvedValue(META_ROW) },
   };
   const make = (): PortfolioService =>
-    new PortfolioService(
-      prismaMock as unknown as PrismaService,
-      chainMock as unknown as ChainService,
-      undefined as unknown as PricingService,
-      undefined as unknown as AgentService,
-    );
+    makeService({ prisma: prismaMock, chain: chainMock });
   const dto = {
     vaultHash: 'hash-v',
     owner: 'account-hash-aa',
     name: 'My Goal',
     profile: 'Moderate' as const,
-    baseAllocation: {
-      mUSDC: 0,
-      mBTC: 2000,
-      mNVDAx: 3000,
-      mXAUT: 4000,
-      mGOOGLx: 1000,
-    },
+    baseAllocation: ALLOC,
     targetAmountUsd: '1000000000',
     targetYear: 2040,
   };
@@ -140,5 +139,47 @@ describe('PortfolioService.register (chain wiring)', () => {
       make().register({ ...dto, baseAllocation: { mBTC: 1 } }),
     ).rejects.toThrow();
     expect(chainMock.register).not.toHaveBeenCalled();
+  });
+});
+
+describe('PortfolioService.get (surfaces on-chain createdYear — golden rule #5)', () => {
+  const chainState = {
+    owner: 'account-hash-aa',
+    agent: 'account-hash-bb',
+    profile: 'Moderate' as const,
+    baseAllocation: ALLOC,
+    currentTargetAllocation: ALLOC,
+    holdings: {
+      mUSDC: '1000000',
+      mBTC: '0',
+      mNVDAx: '0',
+      mXAUT: '0',
+      mGOOGLx: '0',
+    },
+    targetAmountUsd: '1000000000',
+    targetYear: 2040,
+    createdYear: 2019, // on-chain truth (differs from META_ROW's 2026 DB mirror)
+  };
+  const prices = {
+    mUSDC: 1_000_000n,
+    mBTC: 0n,
+    mNVDAx: 0n,
+    mXAUT: 0n,
+    mGOOGLx: 0n,
+  };
+  const chainMock = {
+    viewState: jest.fn().mockResolvedValue(chainState),
+    getPrices: jest.fn().mockResolvedValue(prices),
+  };
+  const prismaMock = {
+    portfolioMeta: { findUnique: jest.fn().mockResolvedValue(META_ROW) },
+  };
+  const make = (): PortfolioService =>
+    makeService({ prisma: prismaMock, chain: chainMock });
+
+  it('returns createdYear from view_state, not the DB mirror', async () => {
+    const res = await make().get('hash-v');
+    expect(res.createdYear).toBe(2019);
+    expect(chainMock.viewState).toHaveBeenCalledWith('hash-v');
   });
 });
