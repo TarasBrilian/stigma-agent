@@ -38,19 +38,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      setPublicKey(await getActivePublicKey());
-    } catch {
-      setPublicKey(null);
-    }
-  }, []);
-
-  // Re-sync on any wallet event (connect/disconnect/active key change/lock).
+  // Sync the active key on mount and on any wallet event (connect / disconnect /
+  // active-key change / lock). The read is async so setState never fires
+  // synchronously within the effect; an `active` guard drops a late resolve after
+  // unmount.
   useEffect(() => {
-    void refresh();
-    return subscribeWalletEvents(() => void refresh());
-  }, [refresh]);
+    let active = true;
+    const sync = async () => {
+      try {
+        const pk = await getActivePublicKey();
+        if (active) setPublicKey(pk);
+      } catch {
+        if (active) setPublicKey(null);
+      }
+    };
+    void sync();
+    const unsubscribe = subscribeWalletEvents(() => void sync());
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   const connect = useCallback(async () => {
     setIsConnecting(true);

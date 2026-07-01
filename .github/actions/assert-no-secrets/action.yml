@@ -1,0 +1,22 @@
+name: Assert no secrets are committed
+description: >-
+  Fail the job if any .env / .pem / secrets/ file is tracked, or if PEM private
+  key material appears in tracked content. Repo-wide backstop shared by every
+  layer's CI workflow (golden rule #8). Requires the repo to be checked out first.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        cd "$GITHUB_WORKSPACE"
+        if git ls-files | grep -E '(^|/)\.env$|\.pem$|(^|/)secrets/'; then
+          echo "::error::A secret-like file (.env / .pem / secrets/) is tracked in git"
+          exit 1
+        fi
+        if git grep -lE -- '-----BEGIN [A-Z ]*PRIVATE KEY-----'; then
+          echo "::error::PEM private key material found in tracked files"
+          exit 1
+        fi
+        echo "No tracked secrets found."

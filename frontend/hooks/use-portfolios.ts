@@ -6,7 +6,7 @@
  * `api.*` directly for first render.
  */
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
 export function usePortfolios(owner: string | null) {
@@ -42,9 +42,9 @@ export function useActivity(vaultHash: string) {
 }
 
 export function useChat(vaultHash: string) {
-  const qc = useQueryClient();
+  // Chat is local component state (see AgentChat), not a cached query — the
+  // mutation just relays the message to the backend and returns the reply.
   return useMutation({
     mutationFn: (message: string) => api.chat(vaultHash, message),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat", vaultHash] }),
   });
 }

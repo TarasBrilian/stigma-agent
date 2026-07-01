@@ -1,33 +1,33 @@
-name: backend
+name: frontend
 
-# Runs the backend's definition-of-done gates on every change that touches
-# backend/ (and on changes to this workflow). Tests are unit-only and fully
-# mocked (no DB, no network), so no Postgres service is needed.
+# Runs the frontend's definition-of-done gates on every change that touches
+# frontend/ (and on changes to this workflow): strict lint, typecheck, the
+# lib/format unit tests, and a production build (which also type-checks).
 on:
   push:
     branches: [main]
     paths:
-      - 'backend/**'
-      - '.github/workflows/backend.yml'
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
       - '.github/actions/assert-no-secrets/**'
   pull_request:
     paths:
-      - 'backend/**'
-      - '.github/workflows/backend.yml'
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
       - '.github/actions/assert-no-secrets/**'
 
 # Cancel superseded runs on the same ref to save CI minutes.
 concurrency:
-  group: backend-${{ github.ref }}
+  group: frontend-${{ github.ref }}
   cancel-in-progress: true
 
-# Least privilege: this workflow only reads the repo (no comments/pushes).
+# Least privilege: this workflow only reads the repo.
 permissions:
   contents: read
 
 defaults:
   run:
-    working-directory: backend
+    working-directory: frontend
 
 jobs:
   build-test:
@@ -35,7 +35,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Backstop for golden rule #8: no agent key / .env / secrets ever committed.
+      # No secrets belong in the client (only NEXT_PUBLIC_* env) — shared repo-wide
+      # backstop that no .env / .pem / secrets/ file is ever committed.
       - uses: ./.github/actions/assert-no-secrets
 
       - uses: pnpm/action-setup@v4
@@ -46,10 +47,10 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: backend/pnpm-lock.yaml
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm prisma generate
       - run: pnpm lint:check
+      - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build

@@ -174,36 +174,65 @@ path from there to actually creating a vault.
       ⚠️ live E2E pends the real Casper Wallet (same sign-payload caveat as the other flows).
 
 ### P1 · Optimistic UI + reconcile
-- [ ] After any signed deploy, show pending and reconcile against backend reads rather than
+- [x] After any signed deploy, show pending and reconcile against backend reads rather than
       assuming instant confirmation (~8s finality).
-      ref: `../ARCHITECTURE.md` §4; `hooks/use-portfolios.ts` (invalidate queries on success)
+      DONE: every signed action runs sign → submit → **`confirmTransaction` (waits for finalization,
+      surfaces reverts)** → `router.refresh()` (re-fetches the server-rendered reads). The forms show
+      staged pending status ("Confirming on-chain (~8s)…") throughout, so nothing assumes instant
+      confirmation. Shared for the one-sig actions via `hooks/use-signed-action.ts`; DepositForm and
+      the create-vault flow apply the same pattern.
+      ref: `hooks/use-signed-action.ts`; `components/{DepositForm,WithdrawForm,UpdateConfigForm}.tsx`
 
 ### P2 · Versioned questionnaire from the backend
 - [ ] Replace the hardcoded `QUESTIONS` with the versioned questionnaire fetched from the API.
       ref: `components/QuestionnaireForm.tsx:17` (TODO)
+      BLOCKED (cross-layer): the backend exposes NO questionnaire endpoint yet — it only *consumes*
+      answers (`POST /onboarding/answers`). Needs a backend `GET /onboarding/questionnaire` (versioned)
+      first; then swap `QUESTIONS` for an `api.getQuestionnaire()` fetch. Deferred to the backend task.
 
 ### P2 · Wallet UX edge states
-- [ ] Handle reject / timeout / no-extension / locked / active-key-change gracefully end to end.
-      ref: `lib/casper.ts:26-33`, `hooks/use-wallet.ts:49-53`
+- [x] Handle reject / timeout / no-extension / locked / active-key-change gracefully end to end.
+      DONE (covered cases): no-extension → `getWalletProvider` throws a clear "install…" message that
+      the `WalletButton` surfaces; reject → "Wallet connection was rejected."; connect timeout / other
+      provider errors → caught in `useWallet.connect` and shown; signing cancel → `signTransactionWithWallet`
+      throws "Signing was cancelled…" (the forms display it); active-key-change / lock → the mount effect
+      re-syncs via `subscribeWalletEvents` and a locked read degrades to disconnected (null). The effect
+      was also fixed to not setState synchronously (`react-hooks/set-state-in-effect`), with an `active`
+      unmount guard. (A proactive "installed?" banner was skipped: it needs mount-time state that risks a
+      hydration mismatch, and the connect-time error already informs the user.)
+      ref: `lib/casper.ts` (wallet session); `hooks/use-wallet.ts`; `components/WalletButton.tsx`
 
 ### P2 · Minor cleanups
-- [ ] `useChat` invalidates `["chat", vaultHash]`, but chat is local state, not a query — remove or back chat with a query.
-      ref: `hooks/use-portfolios.ts:44-50`
+- [x] `useChat` invalidates `["chat", vaultHash]`, but chat is local state, not a query — remove or back chat with a query.
+      DONE: removed the dead invalidation (and the now-unused `useQueryClient`) — the mutation just relays
+      the message and returns the reply; chat stays local component state in `AgentChat`.
+      ref: `hooks/use-portfolios.ts` (`useChat`)
 
 ---
 
 ## 3. Tests & CI
 
-### P1 · CI pipeline (none exists)
-- [ ] Add `.github/workflows/frontend.yml`: `pnpm install`, `pnpm lint`, `pnpm build`
-      (build type-checks). (No `.github/` directory exists yet.)
-- [ ] Add a `typecheck` script (`tsc --noEmit`) so type errors fail fast without a full build.
-      ref: `package.json:5-10` (scripts are dev/build/start/lint — no `typecheck`/`test` yet)
+### P1 · CI pipeline — ✅ DONE
+- [x] Add `.github/workflows/frontend.yml`: install, lint, build (build type-checks).
+      DONE: `.github/workflows/frontend.yml` runs on push to `main` + PRs filtered to `frontend/**`
+      (and the workflow file). Steps mirror the backend workflow: checkout → "Assert no secrets are
+      committed" (repo-wide backstop) → pnpm 9 + Node 22 (pnpm cache) → `pnpm install --frozen-lockfile`
+      → `pnpm lint:check` → `pnpm typecheck` → `pnpm test` → `pnpm build`. Every step verified locally
+      (frozen install in sync, lint:check 0 problems, typecheck clean, 14 tests pass, build OK).
+      ref: `.github/workflows/frontend.yml`; `frontend/package.json` (`lint:check`)
+- [x] Add a `typecheck` script (`tsc --noEmit`) so type errors fail fast without a full build.
+      DONE: `typecheck` (`tsc --noEmit`) + `test` (`vitest run`) + `lint:check` (`eslint --max-warnings 0`)
+      scripts added. ref: `package.json`
 
 ### P2 · Component tests
-- [ ] Test `lib/format.ts` (BigInt fixed-point formatting — the only numeric code in the client)
-      and the create/deposit flows with a mocked wallet provider.
-      ref: `lib/format.ts`, `lib/casper-wallet.d.ts`
+- [x] Test `lib/format.ts` (BigInt fixed-point formatting — the only numeric code in the client).
+      DONE: `lib/format.test.ts` (vitest, Node env) — 14 tests covering `formatUsd` (grouping, half-up
+      cents, cents rollover, negatives, +sign, bigint), `parseUsdToRaw` (encode + reject non-positive/
+      non-numeric/>6dp), `usd6ToPlain` (+ round-trip with `parseUsdToRaw`), `bpsToPercent`/`formatBps`/
+      `formatProgress` (clamp), `truncateHash`, `formatYearsLeft`. `vitest.config.ts` scopes to `lib/**`.
+      ref: `lib/format.test.ts`, `vitest.config.ts`
+      STILL TODO: create/deposit flow tests with a mocked wallet provider (window.CasperWalletProvider +
+      casper-js-sdk stubs) — the numeric core is covered; the wallet-flow harness is a larger follow-up.
 
 ---
 
