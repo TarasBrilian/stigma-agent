@@ -113,6 +113,17 @@ export const api = {
   getActivity: (vaultHash: string) =>
     request<RebalanceLogEntry[]>(`/portfolios/${encodeURIComponent(vaultHash)}/activity`),
 
+  /**
+   * Trigger the keeper to invest a vault's idle mUSDC now (deposit→buy via the
+   * agent's executeBuy) and return the outcome. The deposit flow calls this so the
+   * agent's work is visible immediately, instead of waiting for the ~5-min cron.
+   */
+  investNow: (vaultHash: string) =>
+    request<{ invested: boolean; reason: string }>(
+      `/keeper/invest/${encodeURIComponent(vaultHash)}`,
+      { method: "POST" },
+    ),
+
   /* agent chat */
   chat: (vaultHash: string, message: string) =>
     request<ChatMessage>("/agent/chat", {
