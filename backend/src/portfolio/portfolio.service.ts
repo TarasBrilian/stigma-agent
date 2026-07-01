@@ -69,16 +69,21 @@ export class PortfolioService {
         'baseAllocation must sum to 10000 bps across known assets',
       );
     }
-    // On-chain register is permissionless + idempotent and the UI reads the
-    // mirror + live chain state — so a transient failure (key/network) must NOT
-    // block the API. Best-effort: log and still mirror; an operator can re-register.
-    try {
-      await this.chain.register(dto.owner, dto.vaultHash);
-    } catch (err) {
-      this.logger.warn(
-        `on-chain register failed for ${dto.vaultHash}; mirroring anyway: ${(err as Error).message}`,
+    // On-chain register is permissionless + idempotent, moves no funds, and the
+    // UI reads the mirror + live vault state (never the on-chain registry) — so
+    // do NOT block the response on ~8-180s of on-chain finalization (that stalls
+    // the create-vault UX and can trip a reverse-proxy timeout → 502). Fire it in
+    // the background, best-effort; log the outcome — an operator can re-register.
+    void this.chain
+      .register(dto.owner, dto.vaultHash)
+      .then((tx) =>
+        this.logger.log(`registered ${dto.vaultHash} on-chain (tx ${tx})`),
+      )
+      .catch((err: Error) =>
+        this.logger.warn(
+          `on-chain register failed for ${dto.vaultHash}; mirror kept: ${err.message}`,
+        ),
       );
-    }
     const user = await this.prisma.user.upsert({
       where: { walletAddress: dto.owner },
       update: {},
