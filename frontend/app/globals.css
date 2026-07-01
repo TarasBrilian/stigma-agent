@@ -29,6 +29,13 @@
   --patina: #55705a;
   --terracotta: #9c4a2c;
 
+  /* jewel Mesoamerican accents — for the landing's colorful backdrop */
+  --jewel-jade: #2f8f6b;
+  --jewel-turq: #159a9a;
+  --jewel-gold: #c9a227;
+  --jewel-terra: #b5482a;
+  --jewel-teal: #0f6b6f;
+
   /* fixed helpers (do NOT flip with color-scheme) */
   --cream: #fbf6ea;
   --on-gold: #3a2f14;
@@ -56,6 +63,13 @@
 
     --patina: #86a37f;
     --terracotta: #cd7850;
+
+    /* jewel accents glow a touch brighter on basalt */
+    --jewel-jade: #3fae86;
+    --jewel-turq: #29c2c2;
+    --jewel-gold: #e6c25a;
+    --jewel-terra: #d9663f;
+    --jewel-teal: #1f9ca2;
 
     --background: var(--sand);
     --foreground: var(--ink);
@@ -368,6 +382,37 @@ body::before {
     mask-image: radial-gradient(125% 115% at 50% 46%, #000 66%, transparent 100%);
   }
 
+  /* feature-panel variant — softer all-edge fade for large friezes set beside
+     text (keeps more of the carving than the tight centerpiece radial). */
+  .relief-mask-vignette {
+    -webkit-mask-image: radial-gradient(128% 120% at 50% 50%, #000 72%, transparent 100%);
+    mask-image: radial-gradient(128% 120% at 50% 50%, #000 72%, transparent 100%);
+  }
+
+  /* a lit backdrop with no hard frame — makes a blended relief feel enshrined
+     while still melting into the page (used for the beside-text feature reliefs).
+     isolate + z-index keep the glow behind the relief but above the page. */
+  .relic-glow {
+    position: relative;
+    isolation: isolate;
+  }
+  .relic-glow::before {
+    content: "";
+    position: absolute;
+    inset: -8% -6%;
+    z-index: 0;
+    pointer-events: none;
+    background-image: radial-gradient(
+      58% 54% at 50% 42%,
+      color-mix(in srgb, var(--gold) 16%, transparent),
+      transparent 72%
+    );
+  }
+  .relic-glow > * {
+    position: relative;
+    z-index: 1;
+  }
+
   /* enshrined niche — a lit stone recess that frames a relief like a shrine */
   .relic-niche {
     position: relative;
@@ -395,6 +440,73 @@ body::before {
     position: relative;
     border-radius: 22px;
     background-image: radial-gradient(78% 122% at 82% 50%, rgba(22, 16, 7, 0.24), transparent 64%);
+  }
+
+  /* ── Landing-only "jewel Mesoamerican" backdrop ─────────────────────
+     A fixed, full-viewport layer of jewel-tone gradient fields with Aztec
+     greca (step-fret) bands and sun-glyph watermarks. Sits at z-index -10,
+     BELOW the global stone-grain overlay (body::before, z -1) and all content,
+     so the sandstone panels + text stay readable; only the page ground gains
+     color + tribal geometry. Rendered by the landing page only. */
+  .aztec-bg {
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    pointer-events: none;
+    overflow: hidden;
+    background-image:
+      radial-gradient(34% 38% at 82% 8%, color-mix(in srgb, var(--jewel-turq) 26%, transparent), transparent 70%),
+      radial-gradient(40% 42% at 94% 56%, color-mix(in srgb, var(--jewel-gold) 22%, transparent), transparent 72%),
+      radial-gradient(44% 48% at 8% 30%, color-mix(in srgb, var(--jewel-jade) 24%, transparent), transparent 72%),
+      radial-gradient(48% 50% at 4% 90%, color-mix(in srgb, var(--jewel-terra) 20%, transparent), transparent 72%),
+      radial-gradient(64% 44% at 52% 114%, color-mix(in srgb, var(--jewel-teal) 26%, transparent), transparent 70%);
+  }
+
+  .aztec-band {
+    position: absolute;
+    left: -4%;
+    right: -4%;
+    opacity: 0.2;
+  }
+  .aztec-band-top {
+    top: 12%;
+  }
+  .aztec-band-bottom {
+    bottom: 14%;
+  }
+
+  .aztec-glyph {
+    position: absolute;
+    opacity: 0.16;
+  }
+  .aztec-glyph-tr {
+    top: -14%;
+    right: -8%;
+    width: min(46vw, 480px);
+    color: var(--jewel-gold);
+  }
+  .aztec-glyph-bl {
+    bottom: -16%;
+    left: -10%;
+    width: min(42vw, 440px);
+    color: var(--jewel-gold);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .aztec-bg {
+    background-image:
+      radial-gradient(34% 38% at 82% 8%, color-mix(in srgb, var(--jewel-turq) 34%, transparent), transparent 70%),
+      radial-gradient(40% 42% at 94% 56%, color-mix(in srgb, var(--jewel-gold) 26%, transparent), transparent 72%),
+      radial-gradient(44% 48% at 8% 30%, color-mix(in srgb, var(--jewel-jade) 32%, transparent), transparent 72%),
+      radial-gradient(48% 50% at 4% 90%, color-mix(in srgb, var(--jewel-terra) 26%, transparent), transparent 72%),
+      radial-gradient(64% 44% at 52% 114%, color-mix(in srgb, var(--jewel-teal) 34%, transparent), transparent 70%);
+  }
+  .aztec-band {
+    opacity: 0.26;
+  }
+  .aztec-glyph {
+    opacity: 0.22;
   }
 }
 

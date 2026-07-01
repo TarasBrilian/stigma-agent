@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { TempleFret, Lozenge } from "@/components/ornaments";
 import { Reveal } from "@/components/Reveal";
+import { AztecBackground } from "@/components/AztecBackground";
 import {
   GlidePathFigure,
   SecurityBoundary,
@@ -85,6 +86,9 @@ function SectionHeader({
 export default function Home() {
   return (
     <div className="flex flex-col gap-20 pb-4 sm:gap-28">
+      {/* colorful jewel-Mesoamerican backdrop (landing only) */}
+      <AztecBackground />
+
       {/* ── Hero (text left · enshrined relief right) ─────────── */}
       <section className="hero-stage relative overflow-hidden px-5 py-10 sm:px-8 sm:py-12">
         <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-12">
@@ -195,6 +199,33 @@ export default function Home() {
         </ol>
       </section>
 
+      {/* ── Philosophy — patience made automatic ─────────────── */}
+      <section className="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
+        <Reveal className="relic-glow">
+          <Image
+            src="/relic.png"
+            alt="Carved sandstone frieze: figures seated in meditation beneath trees, flanked by standing attendants"
+            width={1688}
+            height={932}
+            sizes="(max-width: 1024px) 92vw, 560px"
+            className="relief-frieze relief-mask-vignette h-auto w-full"
+          />
+        </Reveal>
+        <Reveal delay={130} className="flex flex-col items-start gap-4">
+          <span className="section-title">The long view</span>
+          <h2 className="carved-title text-2xl sm:text-3xl">Patience, made automatic.</h2>
+          <p className="max-w-md text-sm leading-relaxed text-ink-soft">
+            Great fortunes aren&apos;t timed — they&apos;re tended. Stigma turns a
+            distant goal into a steady, unhurried discipline: contributing,
+            rebalancing, and de-risking on a cadence the market can&apos;t rattle.
+          </p>
+          <p className="max-w-md text-sm leading-relaxed text-ink-soft">
+            The agent doesn&apos;t chase the next candle. It keeps its eyes on the
+            year you named — and moves only when the rules say it should.
+          </p>
+        </Reveal>
+      </section>
+
       {/* ── Glide-path explainer ─────────────────────────────── */}
       <section className="grid items-center gap-10 lg:grid-cols-2 lg:gap-12">
         <Reveal className="flex flex-col items-start gap-4">
@@ -258,6 +289,35 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── Why on-chain — rules carved in stone ─────────────── */}
+      <section className="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
+        <Reveal className="flex flex-col items-start gap-4 lg:order-1">
+          <span className="section-title">Why on-chain</span>
+          <h2 className="carved-title text-2xl sm:text-3xl">Rules carved in stone.</h2>
+          <p className="max-w-md text-sm leading-relaxed text-ink-soft">
+            Every rule that moves your money lives in the contract — not in a
+            company&apos;s terms of service. The target allocation, the swap
+            amounts, who is allowed to withdraw: all enforced on Casper, in
+            public, the same for everyone.
+          </p>
+          <p className="max-w-md text-sm leading-relaxed text-ink-soft">
+            Nothing to take on faith, nothing hidden in a back office. What the
+            agent may do is <span className="text-ink">law you can read</span>,
+            not a promise you have to trust.
+          </p>
+        </Reveal>
+        <Reveal delay={130} className="relic-glow lg:order-2">
+          <Image
+            src="/relic2.png"
+            alt="Carved sandstone frieze: a narrative temple-wall scene of figures, trees, and daily life"
+            width={1805}
+            height={871}
+            sizes="(max-width: 1024px) 92vw, 560px"
+            className="relief-frieze relief-mask-vignette h-auto w-full"
+          />
+        </Reveal>
+      </section>
+
       {/* ── Competitor comparison ────────────────────────────── */}
       <section className="flex flex-col items-center gap-10">
         <SectionHeader eyebrow="How it compares" title="Familiar idea, safer foundation">
@@ -270,30 +330,41 @@ export default function Home() {
         </Reveal>
       </section>
 
-      {/* ── x402 / machine economy ───────────────────────────── */}
-      <Reveal
-        as="section"
-        className="tablet flex flex-col items-center gap-5 px-6 py-10 text-center sm:px-10"
-      >
-        <span className="section-title">Machine economy</span>
-        <h2 className="carved-title max-w-2xl text-2xl sm:text-3xl">
-          An autonomous service that pays its own way.
-        </h2>
-        <p className="max-w-xl text-sm leading-relaxed text-ink-soft">
-          Stigma isn&apos;t a dashboard you operate — it runs itself. And like any
-          real service, it charges for the work it does: each rebalance pulls a
-          tiny fee via <span className="text-ink">x402</span>, Casper&apos;s
-          pay-per-call standard. A glimpse of software that acts, and settles, on
-          its own.
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          {["~0.1% per rebalance", "paid in mUSDC", "settled on-chain"].map((t) => (
-            <span key={t} className="chip chip-gold px-3 py-1 text-xs">
-              {t}
-            </span>
-          ))}
+      {/* ── x402 / machine economy (with the lotus-bearing relief) ─ */}
+      <section className="tablet overflow-hidden px-6 py-10 sm:px-10 sm:py-12">
+        <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,300px)_1fr] lg:gap-12">
+          <Reveal className="relic-glow mx-auto w-full max-w-[16rem]">
+            <Image
+              src="/relic3.png"
+              alt="Tall carved panel: the Buddha holding a lotus stem, framed by bodhi leaves and lotus blooms"
+              width={921}
+              height={1707}
+              sizes="(max-width: 1024px) 60vw, 300px"
+              className="relief-frieze relief-mask-vignette h-auto w-full"
+            />
+          </Reveal>
+          <Reveal delay={130} className="flex flex-col items-start gap-5 text-left">
+            <span className="section-title">Machine economy</span>
+            <h2 className="carved-title text-2xl sm:text-3xl">
+              An autonomous service that pays its own way.
+            </h2>
+            <p className="max-w-xl text-sm leading-relaxed text-ink-soft">
+              Stigma isn&apos;t a dashboard you operate — it runs itself. And like
+              any real service, it charges for the work it does: each rebalance
+              pulls a tiny fee via <span className="text-ink">x402</span>,
+              Casper&apos;s pay-per-call standard. A glimpse of software that acts,
+              and settles, on its own.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              {["~0.1% per rebalance", "paid in mUSDC", "settled on-chain"].map((t) => (
+                <span key={t} className="chip chip-gold px-3 py-1 text-xs">
+                  {t}
+                </span>
+              ))}
+            </div>
+          </Reveal>
         </div>
-      </Reveal>
+      </section>
 
       {/* ── Final CTA ────────────────────────────────────────── */}
       <Reveal as="section" className="flex flex-col items-center gap-6 text-center">
