@@ -20,19 +20,14 @@ import {
 import { ASSETS, ASSET_SYMBOLS } from "@/lib/constants";
 import { formatBps, formatUsd } from "@/lib/format";
 import { useWallet } from "@/hooks/use-wallet";
+import { useQuestionnaire } from "@/hooks/use-portfolios";
 import type { OnboardingResult, StarterPortfolio } from "@/lib/types";
 import { ProfileBadge } from "./ProfileBadge";
-
-// TODO: replace with the versioned questionnaire fetched from the backend.
-const QUESTIONS = [
-  { id: "horizon", label: "How many years until you need this money?" },
-  { id: "drawdown", label: "How would you react to a 20% drop in a year?" },
-  { id: "goal", label: "What is this portfolio for?" },
-] as const;
 
 export function QuestionnaireForm() {
   const { publicKey, isConnected } = useWallet();
   const router = useRouter();
+  const { data: questionnaire, error: questionnaireError } = useQuestionnaire();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [age, setAge] = useState("");
   const [result, setResult] = useState<OnboardingResult | null>(null);
@@ -90,13 +85,16 @@ export function QuestionnaireForm() {
   };
 
   const submit = async () => {
-    if (!publicKey) return;
+    if (!publicKey || !questionnaire) return;
     setSubmitting(true);
     setError(null);
     try {
       const res = await api.submitOnboarding({
         owner: publicKey,
-        answers: QUESTIONS.map((q) => ({ questionId: q.id, value: answers[q.id] ?? "" })),
+        answers: questionnaire.questions.map((q) => ({
+          questionId: q.id,
+          value: answers[q.id] ?? "",
+        })),
         demographics: { age: Number(age) || 0 },
       });
       setResult(res);
@@ -177,16 +175,46 @@ export function QuestionnaireForm() {
     );
   }
 
+  if (questionnaireError) {
+    return (
+      <p className="text-sm text-terracotta">
+        Couldn&apos;t load the questionnaire. Make sure the backend is running.
+      </p>
+    );
+  }
+  if (!questionnaire) {
+    return <p className="text-sm text-ink-faint">Loading questionnaire…</p>;
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      {QUESTIONS.map((q) => (
+      {questionnaire.questions.map((q) => (
         <label key={q.id} className="flex flex-col gap-1.5 text-sm">
           <span className="text-ink-soft">{q.label}</span>
-          <input
-            value={answers[q.id] ?? ""}
-            onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
-            className="field px-3 py-2 text-sm"
-          />
+          {q.kind === "choice" ? (
+            <select
+              value={answers[q.id] ?? ""}
+              onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+              className="field px-3 py-2 text-sm"
+            >
+              <option value="" disabled>
+                Select…
+              </option>
+              {q.options?.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={answers[q.id] ?? ""}
+              onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+              inputMode={q.kind === "number" ? "numeric" : undefined}
+              placeholder={q.placeholder}
+              className="field px-3 py-2 text-sm"
+            />
+          )}
         </label>
       ))}
       <label className="flex flex-col gap-1.5 text-sm">

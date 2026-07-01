@@ -9,6 +9,15 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
+export function useQuestionnaire() {
+  return useQuery({
+    queryKey: ["questionnaire"],
+    queryFn: () => api.getQuestionnaire(),
+    // Static versioned config — no need to refetch within a session.
+    staleTime: Infinity,
+  });
+}
+
 export function usePortfolios(owner: string | null) {
   return useQuery({
     queryKey: ["portfolios", owner],

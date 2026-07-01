@@ -5,6 +5,7 @@ import { PortfolioService } from '../portfolio/portfolio.service';
 import type { ProfileReply } from '../agent/agent.parse';
 import type { StarterPortfolioDto } from '../portfolio/portfolio.types';
 import type { SubmitOnboardingDto } from './dto/submit-onboarding.dto';
+import { QUESTIONNAIRE, type QuestionnaireDto } from './questionnaire';
 
 export interface OnboardingResultDto {
   profile: ProfileReply;
@@ -24,6 +25,11 @@ export class OnboardingService {
     private readonly agent: AgentService,
     private readonly portfolio: PortfolioService,
   ) {}
+
+  /** The versioned questionnaire the frontend renders (static config). */
+  getQuestionnaire(): QuestionnaireDto {
+    return QUESTIONNAIRE;
+  }
 
   async submit(dto: SubmitOnboardingDto): Promise<OnboardingResultDto> {
     const user = await this.prisma.user.upsert({

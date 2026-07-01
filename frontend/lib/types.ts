@@ -148,3 +148,25 @@ export interface OnboardingResult {
   profile: ProfileResult;
   starters: StarterPortfolio[];
 }
+
+/** How a questionnaire question is rendered/answered. */
+export type QuestionKind = "number" | "text" | "choice";
+
+/** One question from the backend's versioned questionnaire. */
+export interface Question {
+  /** Stable id echoed back in the answers (the agent keys off these). */
+  id: string;
+  label: string;
+  kind: QuestionKind;
+  /** For `choice`: the selectable option values. */
+  options?: string[];
+  placeholder?: string;
+  min?: number;
+  max?: number;
+}
+
+/** The versioned onboarding questionnaire served by the backend. */
+export interface Questionnaire {
+  version: string;
+  questions: Question[];
+}

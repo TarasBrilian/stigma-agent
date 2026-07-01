@@ -19,6 +19,7 @@ import type {
   PortfolioSummary,
   Profile,
   Projection,
+  Questionnaire,
   RebalanceLogEntry,
   StarterPortfolio,
   SuggestAllocationResult,
@@ -61,6 +62,9 @@ async function request<T>(
 
 export const api = {
   /* onboarding */
+  getQuestionnaire: () =>
+    request<Questionnaire>("/onboarding/questionnaire"),
+
   submitOnboarding: (payload: OnboardingSubmission) =>
     request<OnboardingResult>("/onboarding/answers", { method: "POST", json: payload }),
 

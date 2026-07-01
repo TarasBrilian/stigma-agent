@@ -183,12 +183,19 @@ path from there to actually creating a vault.
       the create-vault flow apply the same pattern.
       ref: `hooks/use-signed-action.ts`; `components/{DepositForm,WithdrawForm,UpdateConfigForm}.tsx`
 
-### P2 · Versioned questionnaire from the backend
-- [ ] Replace the hardcoded `QUESTIONS` with the versioned questionnaire fetched from the API.
-      ref: `components/QuestionnaireForm.tsx:17` (TODO)
-      BLOCKED (cross-layer): the backend exposes NO questionnaire endpoint yet — it only *consumes*
-      answers (`POST /onboarding/answers`). Needs a backend `GET /onboarding/questionnaire` (versioned)
-      first; then swap `QUESTIONS` for an `api.getQuestionnaire()` fetch. Deferred to the backend task.
+### P2 · Versioned questionnaire from the backend — ✅ DONE (cross-layer)
+- [x] Replace the hardcoded `QUESTIONS` with the versioned questionnaire fetched from the API.
+      DONE (both layers): the backend now serves `GET /onboarding/questionnaire` →
+      `{ version, questions: [{ id, label, kind, options?, placeholder?, min?, max? }] }` from a single
+      source of truth (`backend/src/onboarding/questionnaire.ts`), keeping `horizon` a `number` question
+      (the agent's `heuristicProfile` reads it numerically). The frontend removed the hardcoded
+      `QUESTIONS`, fetches via `useQuestionnaire()` (React Query, `staleTime: Infinity`), and renders each
+      question by `kind` (number/text/choice → input/select); `submit` maps over the fetched questions.
+      Loading/error states handled. Age stays a separate demographic input (the backend keeps
+      `demographics` distinct from the risk questionnaire).
+      ref: `components/QuestionnaireForm.tsx`; `lib/api.ts` (`getQuestionnaire`); `hooks/use-portfolios.ts`
+      (`useQuestionnaire`); `lib/types.ts` (`Question`/`Questionnaire`); backend
+      `src/onboarding/{questionnaire.ts,onboarding.controller.ts,onboarding.service.ts}` (+ `questionnaire.spec.ts`)
 
 ### P2 · Wallet UX edge states
 - [x] Handle reject / timeout / no-extension / locked / active-key-change gracefully end to end.
