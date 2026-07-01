@@ -1,9 +1,9 @@
 "use client";
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import type { Allocation } from "@/lib/types";
+import type { Allocation, AssetSymbol, Usd6 } from "@/lib/types";
 import { ASSETS, ASSET_SYMBOLS } from "@/lib/constants";
-import { bpsToPercent } from "@/lib/format";
+import { bpsToPercent, formatUsd } from "@/lib/format";
 
 function toData(alloc: Allocation) {
   return ASSET_SYMBOLS.filter((s) => (alloc[s] ?? 0) > 0).map((s) => ({
@@ -47,13 +47,17 @@ function Donut({ title, alloc }: { title: string; alloc: Allocation }) {
 export function AllocationChart({
   current,
   target,
+  values,
 }: {
   current: Allocation;
   target: Allocation;
+  /** Per-asset current value in USD (6 dp), from the backend. */
+  values?: Partial<Record<AssetSymbol, Usd6>>;
 }) {
   const rows = ASSET_SYMBOLS.filter(
     (s) => (current[s] ?? 0) > 0 || (target[s] ?? 0) > 0,
   );
+  const cols = "grid-cols-[1fr_5rem_6rem_5rem]";
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-4">
@@ -62,15 +66,18 @@ export function AllocationChart({
       </div>
 
       <div className="flex flex-col gap-1">
-        <div className="grid grid-cols-[1fr_5rem_5rem] gap-x-4 border-b border-line/60 pb-1.5 text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+        <div
+          className={`grid ${cols} gap-x-4 border-b border-line/60 pb-1.5 text-[11px] uppercase tracking-[0.12em] text-ink-faint`}
+        >
           <span>Asset</span>
           <span className="text-right">Current</span>
+          <span className="text-right">Value</span>
           <span className="text-right">Target</span>
         </div>
         {rows.map((s) => (
           <div
             key={s}
-            className="grid grid-cols-[1fr_5rem_5rem] items-center gap-x-4 py-1 text-sm"
+            className={`grid ${cols} items-center gap-x-4 py-1 text-sm`}
           >
             <span className="flex items-center gap-2 text-ink">
               <span
@@ -81,6 +88,9 @@ export function AllocationChart({
             </span>
             <span className="text-right font-mono text-ink-soft">
               {bpsToPercent(current[s] ?? 0).toFixed(1)}%
+            </span>
+            <span className="text-right font-mono text-ink">
+              {formatUsd(values?.[s] ?? "0")}
             </span>
             <span className="text-right font-mono text-ink-soft">
               {bpsToPercent(target[s] ?? 0).toFixed(1)}%

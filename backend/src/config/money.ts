@@ -41,17 +41,28 @@ type Holdings = Partial<Record<string, string>>;
 type Prices = Partial<Record<AssetSymbol, bigint>>;
 
 /**
- * Total portfolio value in raw USD (6 dp) from raw token holdings × oracle
- * prices: holding [token base units] × price [USD/token, 6 dp] / 10^decimals.
+ * Per-asset value in raw USD (6 dp) from raw token holdings × oracle prices:
+ * holding [token base units] × price [USD/token, 6 dp] / 10^decimals.
  */
-export function valueUsd6(holdings: Holdings, prices: Prices): bigint {
+export function assetValuesUsd6(
+  holdings: Holdings,
+  prices: Prices,
+): Record<AssetSymbol, bigint> {
   const scale = 10n ** BigInt(TOKEN_DECIMALS);
-  let total = 0n;
+  const out = {} as Record<AssetSymbol, bigint>;
   for (const asset of ASSET_SYMBOLS) {
     const h = BigInt(holdings[asset] ?? '0');
     const p = prices[asset] ?? 0n;
-    total += (h * p) / scale;
+    out[asset] = (h * p) / scale;
   }
+  return out;
+}
+
+/** Total portfolio value in raw USD (6 dp) — the sum of the per-asset values. */
+export function valueUsd6(holdings: Holdings, prices: Prices): bigint {
+  const per = assetValuesUsd6(holdings, prices);
+  let total = 0n;
+  for (const asset of ASSET_SYMBOLS) total += per[asset];
   return total;
 }
 

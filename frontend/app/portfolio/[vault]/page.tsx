@@ -64,6 +64,7 @@ export default async function PortfolioPage({
           <AllocationChart
             current={state.currentAllocation}
             target={state.currentTargetAllocation}
+            values={state.currentValues}
           />
         </section>
 

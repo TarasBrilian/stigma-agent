@@ -33,6 +33,8 @@ export interface PortfolioStateDto extends PortfolioMetaDto {
   currentAllocation: AllocationDto;
   /** Glide-path-adjusted target from the contract (`view_state`), bps. */
   currentTargetAllocation: AllocationDto;
+  /** Per-asset current value in raw USD (6 dp) — holdings × oracle prices. */
+  currentValues: Record<string, string>;
   totalValueUsd: string;
   progressBps: number;
 }

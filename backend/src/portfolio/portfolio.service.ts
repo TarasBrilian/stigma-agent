@@ -10,6 +10,7 @@ import { ChainService } from '../chain/chain.service';
 import { PricingService, type Projection } from '../pricing/pricing.service';
 import { AgentService } from '../agent/agent.service';
 import {
+  ASSET_SYMBOLS,
   BPS_TOTAL,
   PROFILE_BLURB,
   STARTER_ALLOCATION_BPS,
@@ -18,6 +19,7 @@ import {
   type Profile,
 } from '../config/constants';
 import {
+  assetValuesUsd6,
   decimalToUsd6,
   isValidAllocation,
   usd6ToDecimal,
@@ -139,6 +141,7 @@ export class PortfolioService {
       this.chain.getPrices(),
     ]);
     const value = valueUsd6(state.holdings, prices);
+    const values = assetValuesUsd6(state.holdings, prices);
     const target = BigInt(decimalToUsd6(meta.targetAmountUsd));
     return {
       ...this.toMetaDto(meta),
@@ -148,6 +151,10 @@ export class PortfolioService {
       holdings: state.holdings,
       currentAllocation: weightsBps(state.holdings, prices),
       currentTargetAllocation: state.currentTargetAllocation,
+      // Per-asset USD value (backend-computed — no money math in the client).
+      currentValues: Object.fromEntries(
+        ASSET_SYMBOLS.map((a) => [a, values[a].toString()]),
+      ),
       totalValueUsd: value.toString(),
       progressBps: this.progressBps(value, target, false),
     };

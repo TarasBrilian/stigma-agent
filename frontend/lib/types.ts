@@ -72,6 +72,8 @@ export interface PortfolioState extends PortfolioMeta {
   currentAllocation: Allocation;
   /** Glide-path-adjusted target from the contract (`view_state`), bps. */
   currentTargetAllocation: Allocation;
+  /** Per-asset current value in USD (6 dp), computed by the backend. */
+  currentValues: Partial<Record<AssetSymbol, Usd6>>;
   /** Total portfolio value in USD (6 dp). */
   totalValueUsd: Usd6;
   /** Progress toward the goal in bps (value / targetAmount), computed by backend. */
