@@ -479,6 +479,23 @@ export async function submitTransaction(tx: Transaction): Promise<string> {
   return result.transactionHash.toHex();
 }
 
+/** Known Odra contract error codes → readable messages (best-effort). */
+const CONTRACT_ERRORS: Record<string, string> = {
+  // odra-modules CEP-18 (mUSDC + asset tokens)
+  "60001":
+    "Insufficient mUSDC balance — claim more from the Faucet, then try again.",
+  "60002": "mUSDC allowance too low — retry the deposit (it re-approves).",
+};
+
+/** Turn a raw on-chain revert ("User error: 60001") into a friendlier message. */
+function friendlyRevert(revert: string): string {
+  const code = revert.match(/error:?\s*(\d+)/i)?.[1];
+  return (
+    (code && CONTRACT_ERRORS[code]) ||
+    `Transaction reverted on-chain: ${revert}`
+  );
+}
+
 /**
  * Wait for a submitted transaction to finalize, surfacing an on-chain revert as a
  * thrown error (mirrors the backend's proven write path). Needed to land `approve`
@@ -493,7 +510,7 @@ export async function confirmTransaction(
   const rpc = await rpcClient();
   const info = await rpc.waitForTransaction(tx, timeoutMs);
   const revert = info?.executionInfo?.executionResult?.errorMessage;
-  if (revert) throw new Error(`Transaction reverted on-chain: ${revert}`);
+  if (revert) throw new Error(friendlyRevert(revert));
 }
 
 /**
