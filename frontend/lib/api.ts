@@ -119,7 +119,7 @@ export const api = {
    * agent's work is visible immediately, instead of waiting for the ~5-min cron.
    */
   investNow: (vaultHash: string) =>
-    request<{ invested: boolean; reason: string }>(
+    request<{ invested: boolean; reason: string; txHash?: string }>(
       `/keeper/invest/${encodeURIComponent(vaultHash)}`,
       { method: "POST" },
     ),

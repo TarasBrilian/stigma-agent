@@ -34,7 +34,7 @@ export class KeeperController {
   @Post('keeper/invest/:vault')
   investNow(
     @Param('vault') vault: string,
-  ): Promise<{ invested: boolean; reason: string }> {
+  ): Promise<{ invested: boolean; reason: string; txHash?: string }> {
     return this.keeper.investIdle(vault);
   }
 

@@ -93,7 +93,7 @@ export class KeeperService {
    */
   async investIdle(
     vaultHash: string,
-  ): Promise<{ invested: boolean; reason: string }> {
+  ): Promise<{ invested: boolean; reason: string; txHash?: string }> {
     if (this.inFlight.has(vaultHash)) {
       return { invested: false, reason: 'already in flight' };
     }
@@ -103,8 +103,10 @@ export class KeeperService {
       if (idle < KEEPER.minTradeUsd6) {
         return { invested: false, reason: `idle ${idle} below min trade` };
       }
-      await this.chain.executeBuy(vaultHash);
-      return { invested: true, reason: `invested ${idle} idle mUSDC` };
+      // executeBuy submits a real TransactionV1 and waits for finality — surface
+      // its hash so the UI can link the on-chain buy to the explorer.
+      const txHash = await this.chain.executeBuy(vaultHash);
+      return { invested: true, reason: `invested ${idle} idle mUSDC`, txHash };
     } finally {
       this.inFlight.delete(vaultHash);
     }

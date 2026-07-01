@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { ASSETS, ASSET_SYMBOLS } from "@/lib/constants";
 import { bpsToPercent, formatUsd } from "@/lib/format";
+import { TxLink } from "@/components/TxLink";
 import type { Allocation } from "@/lib/types";
 
 const sleep = (ms: number): Promise<void> =>
@@ -81,6 +82,7 @@ export function AgentInvestOverlay({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
+  const [txHash, setTxHash] = useState<string | null>(null);
   const started = useRef(false);
 
   useEffect(() => {
@@ -99,6 +101,7 @@ export function AgentInvestOverlay({
         setPhase("executing");
         const res = await api.investNow(vaultHash);
         setReason(res.reason);
+        if (res.txHash) setTxHash(res.txHash);
         setPhase(res.invested ? "done" : "empty");
       } catch (e) {
         setError(e instanceof Error ? e.message : "The agent could not invest.");
@@ -206,6 +209,11 @@ export function AgentInvestOverlay({
           </div>
         )}
 
+        {phase === "done" && txHash && (
+          <p className="mt-4 text-xs text-ink-faint">
+            Bought on-chain by the agent · <TxLink hash={txHash} />
+          </p>
+        )}
         {phase === "empty" && (
           <p className="mt-4 text-xs text-ink-faint">
             {reason || "Your deposit is already invested."}
