@@ -98,6 +98,30 @@ export function isValueNotFound(err: unknown): boolean {
   return msg.includes('-32003');
 }
 
+/** Retry policy for a TRANSIENT RPC transport blip (flaky public node). */
+const RPC_RETRY_ATTEMPTS = 3;
+const RPC_RETRY_BACKOFF_MS = 400;
+const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * True for a transient network/transport failure (a public-node "Network Error",
+ * timeout, or dropped connection) — NOT an app-level RPC error like -32003 or an
+ * on-chain revert. Only these are worth retrying; real signals must propagate.
+ */
+export function isTransientRpcError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes('network error') ||
+    msg.includes('failed to send http request') ||
+    msg.includes('timeout') ||
+    msg.includes('timed out') ||
+    msg.includes('econnreset') ||
+    msg.includes('econnrefused') ||
+    msg.includes('socket hang up')
+  );
+}
+
 /**
  * Build an account `Address` Key from the `owner` the frontend reports — either an
  * already-formatted `account-hash-…`/`hash-…` string, or a raw public-key hex (the
@@ -335,6 +359,28 @@ export class ChainService {
   }
 
   /**
+   * Run an RPC call, retrying a TRANSIENT transport failure (a flaky public-node
+   * "Network Error"/timeout) a few times with a short backoff. App-level RPC
+   * errors (value-not-found -32003, on-chain reverts) are not transient and
+   * propagate immediately, so callers still see the real signal (golden rule:
+   * surface chain errors — a network blip just isn't one).
+   */
+  private async withRpcRetry<T>(fn: () => Promise<T>): Promise<T> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        if (!isTransientRpcError(err) || attempt >= RPC_RETRY_ATTEMPTS)
+          throw err;
+        this.logger.warn(
+          `RPC transient failure (attempt ${attempt}/${RPC_RETRY_ATTEMPTS}), retrying: ${(err as Error).message}`,
+        );
+        await delay(RPC_RETRY_BACKOFF_MS * attempt);
+      }
+    }
+  }
+
+  /**
    * Lazily load the hot key from `AGENT_SECRET_KEY_PATH`. Algorithm is detected
    * from the PEM header (Casper EC keys are secp256k1; otherwise ed25519).
    * 🔴 Golden rule #8: this value is never logged or returned over the API.
@@ -403,9 +449,8 @@ export class ChainService {
     const pkgHex = packageHash.replace(/^hash-/, '');
     const cached = this.contractHashCache.get(pkgHex);
     if (cached) return cached;
-    const res = await this.client().queryLatestGlobalState(
-      `hash-${pkgHex}`,
-      [],
+    const res = await this.withRpcRetry(() =>
+      this.client().queryLatestGlobalState(`hash-${pkgHex}`, []),
     );
     const versions = (res.rawJSON as RawContractPackage)?.stored_value
       ?.ContractPackage?.versions;
@@ -436,7 +481,9 @@ export class ChainService {
       ),
     );
     try {
-      const res = await this.client().getDictionaryItemByIdentifier(null, id);
+      const res = await this.withRpcRetry(() =>
+        this.client().getDictionaryItemByIdentifier(null, id),
+      );
       const hex = (res.rawJSON as RawClValue)?.stored_value?.CLValue?.bytes;
       return typeof hex === 'string'
         ? Uint8Array.from(Buffer.from(hex, 'hex'))
