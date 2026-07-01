@@ -69,12 +69,28 @@ then calls `registry.register` (the UI does not — see ADR 0001).
       bytes (static asset/public path) for the module-bytes deploy.
 
 ### P0 · Sign & submit plumbing (`lib/casper.ts`)
-- [ ] Serialize the `Deploy` to the JSON shape Casper Wallet expects in `signDeployWithWallet`,
-      then attach the returned signature as an `Approval` on the deploy.
-      ref: `lib/casper.ts:123`
-- [ ] Verify `submitDeploy` puts the signed deploy via `RpcClient` and returns the hash.
-      ref: `lib/casper.ts:136`
-      done: a wallet-signed deposit lands on testnet and the deploy hash is shown
+- [x] Serialize the transaction to the JSON shape Casper Wallet expects and attach the
+      returned signature as an `Approval`.
+      DONE: MIGRATED off legacy `Deploy` — the builders emit a Casper 2.0 `Transaction`
+      (TransactionV1), so `signDeployWithWallet`→`signTransactionWithWallet(tx, publicKeyHex)`
+      now signs the SDK's canonical `Transaction.toJSON()` via `provider.sign`, then attaches
+      the signature with `tx.setSignature(sig, PublicKey.fromHex(pk))`. The wallet returns a
+      raw 64-byte signature; `toApprovalSignature` prepends the 1-byte algorithm tag
+      (`0x01` ed25519 / `0x02` secp256k1, == the signer pubkey's own prefix byte) that a
+      Casper approval requires — a wallet that already tagged it (65 bytes) passes through.
+      Cancelled/empty/malformed signatures throw. Mirrors the backend's proven `tx.sign(key)`
+      path, differing only in that the signer is the wallet. `tsc --noEmit` clean.
+      ref: `lib/casper.ts` (`signTransactionWithWallet`/`toApprovalSignature`; hex decode reuses the SDK's `Conversions.decodeBase16` — no hand-rolled decoder)
+      🔴 golden rule #1 (only USER-action transactions are signed here)
+- [x] Verify submit puts the signed transaction via `RpcClient` and returns the hash.
+      DONE: `submitDeploy`→`submitTransaction(tx)` uses `RpcClient.putTransaction(tx)` (not the
+      legacy `putDeploy`) and returns `result.transactionHash.toHex()`.
+      ref: `lib/casper.ts` (`submitTransaction`)
+      ⚠️ STILL TODO (live E2E): a wallet-signed deposit landing on testnet needs the deposit
+      FORM (next task) + the real Casper Wallet extension to confirm it accepts the
+      `Transaction.toJSON()` payload — the one thing untestable without the live wallet, like
+      the backend live-validated its own writes.
+      done: a wallet-signed deposit lands on testnet and the tx hash is shown
 
 ### P0 · Wire the create-vault flow into the UI (no flow exists today)
 `QuestionnaireForm` ends at displaying the profile + a starter count; there is no
