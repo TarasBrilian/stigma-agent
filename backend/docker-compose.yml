@@ -1,0 +1,32 @@
+# Local Postgres for the Stigma backend (development only).
+#
+# Credentials default to the values documented in `.env.example`'s DATABASE_URL
+# (postgresql://user:pass@localhost:5432/stigma), so the documented setup flow —
+#   cp .env.example .env  &&  docker compose up -d  &&  pnpm prisma migrate deploy
+# — works out of the box. Override per-shell if your .env differs, e.g.:
+#   POSTGRES_USER=me POSTGRES_PASSWORD=secret POSTGRES_DB=mydb docker compose up -d
+#
+# Data persists in the named volume `stigma-pgdata`; `docker compose down -v` wipes it.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: stigma-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
+      POSTGRES_DB: ${POSTGRES_DB:-stigma}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - stigma-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Same creds as above so the check passes only once the DB truly accepts connections.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-stigma}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  stigma-pgdata:
