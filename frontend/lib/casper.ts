@@ -482,6 +482,19 @@ export async function confirmTransaction(
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Minimal raw `state_get_entity` shape — named keys are read from rawJSON (see below). */
+interface RawNamedKey {
+  name: string;
+  key: string;
+}
+interface RawEntityResult {
+  entity?: {
+    AddressableEntity?: { named_keys?: RawNamedKey[] };
+    Account?: { named_keys?: RawNamedKey[] };
+  };
+  named_keys?: RawNamedKey[];
+}
+
 export async function resolveVaultHash(
   publicKeyHex: string,
   packageHashKeyName: string,
@@ -490,19 +503,21 @@ export async function resolveVaultHash(
   const rpc = await rpcClient();
   const { EntityIdentifier, PublicKey } = await import("casper-js-sdk");
   const id = EntityIdentifier.fromPublicKey(PublicKey.fromHex(publicKeyHex));
-  // The package-hash named key can lag the deploy's finalization by a block or
-  // two (global state settles after `waitForTransaction` returns), so poll the
-  // account's named keys for ~30s instead of failing on the first miss.
-  // Casper 2.0 stores them under the addressable entity; pre-migration accounts
-  // expose them under `legacyAccount` — check both.
+  // Read named keys from the RAW RPC JSON: casper-js-sdk v5 does NOT deserialize
+  // the legacy `Account` entity variant (the common un-migrated testnet account)
+  // into `entity.legacyAccount`, so the typed path is always empty there. The
+  // package hash lands under the deployer's named keys as a ready `hash-…` string.
+  // Still poll — the key can also lag finalization by a block or two.
   for (let attempt = 0; attempt < attempts; attempt++) {
     const res = await rpc.getLatestEntity(id);
+    const raw = res.rawJSON as unknown as RawEntityResult | undefined;
     const namedKeys =
-      res.entity.addressableEntity?.namedKeys ??
-      res.entity.legacyAccount?.namedKeys ??
+      raw?.entity?.AddressableEntity?.named_keys ??
+      raw?.entity?.Account?.named_keys ??
+      raw?.named_keys ??
       [];
-    const named = namedKeys.find((k) => k.name === packageHashKeyName);
-    if (named) return named.key.toPrefixedString();
+    const named = namedKeys.find((k) => k?.name === packageHashKeyName);
+    if (named?.key) return named.key;
     if (attempt < attempts - 1) await sleep(intervalMs);
   }
   throw new Error(
